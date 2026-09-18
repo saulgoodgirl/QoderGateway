@@ -695,7 +695,7 @@ def _run_parent(parent_id: str, workers: int = 3) -> None:
         with _LOCK:
             if _REGISTRAR["running"] and not _REGISTRAR["active"]:
                 _REGISTRAR["running"] = False
-                stats = dict(_REGISTRAR["stats"])
+            stats = dict(_REGISTRAR["stats"])
         _log("sched", f"全部停止。本次共注册 {stats.get('success', 0)} 个账户（失败 {stats.get('failed', 0)}）")
 
 

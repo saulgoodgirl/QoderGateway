@@ -8,8 +8,10 @@ build/
 node_modules/
 frontend/node_modules/
 frontend/dist/
-src/qoder2api/static/
+data/
 *.db
+*.db-shm
+*.db-wal
 
 # scripts 凭据与临时产物（含真实 token/密码，勿提交）
 scripts/qoder_credentials.json

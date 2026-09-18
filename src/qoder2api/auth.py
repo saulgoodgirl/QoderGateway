@@ -37,6 +37,7 @@ class AuthIdentity:
     user_type: str
     security_oauth_token: str
     refresh_token: str
+    region: str = "cn"
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class SessionContext:
     machine_id: str
     machine_token: str
     machine_type: str
+    region: str = "cn"
 
 
 def new_machine() -> tuple[str, str, str]:
@@ -92,7 +94,7 @@ def new_session(identity: AuthIdentity, machine_id: str, machine_token: str, mac
     temp_key = uuid.uuid4().hex[:16].encode("ascii")
     cosy_key = base64.b64encode(rsa_encrypt(temp_key)).decode()
     info = base64.b64encode(aes_cbc_pkcs7_encrypt(auth_payload(identity), temp_key)).decode()
-    return SessionContext(temp_key, cosy_key, info, identity, machine_id, machine_token, machine_type)
+    return SessionContext(temp_key, cosy_key, info, identity, machine_id, machine_token, machine_type, identity.region)
 
 
 def build_payload_b64(info: str) -> str:
@@ -176,21 +178,136 @@ async def exchange_job_token(personal_token: str, machine_id: str, machine_token
     return response.json()
 
 
+async def exchange_job_token_cn(personal_token: str) -> tuple[str, str, dict[str, Any]]:
+    """Exchange PAT for domestic Qoder CN."""
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "pi-provider-qoder",
+        "Cosy-Version": "1.0.1",
+        "Cosy-ClientType": "5",
+    }
+    async with httpx.AsyncClient(timeout=15, **httpx_client_kwargs()) as client:
+        resp = await client.post(
+            "https://openapi.qoder.com.cn/api/v1/jobToken/exchange",
+            json={"personal_token": personal_token},
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"CN exchange HTTP {resp.status_code}: {resp.text}")
+        body = resp.json()
+        token = body.get("token") or ""
+        refresh_token = body.get("refresh_token") or ""
+        if not token:
+            raise RuntimeError("CN exchange returned empty token")
+
+        user_data = {}
+        try:
+            u_resp = await client.get(
+                "https://openapi.qoder.com.cn/api/v1/userinfo",
+                headers={"Authorization": f"Bearer {token}", **headers},
+            )
+            if u_resp.status_code == 200:
+                user_data = u_resp.json()
+        except Exception:
+            pass
+        return token, refresh_token, user_data
+
+
+async def exchange_job_token_global(personal_token: str) -> tuple[str, str, dict[str, Any]]:
+    """Exchange PAT for global Qoder openapi."""
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "pi-provider-qoder",
+        "Cosy-Version": "1.0.1",
+        "Cosy-ClientType": "5",
+    }
+    async with httpx.AsyncClient(timeout=15, **httpx_client_kwargs()) as client:
+        resp = await client.post(
+            "https://openapi.qoder.sh/api/v1/jobToken/exchange",
+            json={"personal_token": personal_token},
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Global exchange HTTP {resp.status_code}: {resp.text}")
+        body = resp.json()
+        token = body.get("token") or ""
+        refresh_token = body.get("refresh_token") or ""
+        user_data = {}
+        try:
+            u_resp = await client.get(
+                "https://openapi.qoder.sh/api/v1/userinfo",
+                headers={"Authorization": f"Bearer {token}", **headers},
+            )
+            if u_resp.status_code == 200:
+                user_data = u_resp.json()
+        except Exception:
+            pass
+        return token, refresh_token, user_data
+
+
 async def create_session(personal_token: str) -> SessionContext:
     machine_id, machine_token, machine_type = new_machine()
-    data = await exchange_job_token(personal_token, machine_id, machine_token, machine_type)
-    identity = AuthIdentity(
-        name=data.get("name", ""),
-        aid=data.get("id", ""),
-        uid=data.get("id", ""),
-        yx_uid="",
-        organization_id="",
-        organization_name="",
-        user_type=data.get("userType", "personal_standard"),
-        security_oauth_token=data.get("securityOauthToken", ""),
-        refresh_token=data.get("refreshToken", ""),
-    )
-    return new_session(identity, machine_id, machine_token, machine_type)
+
+    # 1. 优先尝试国内版 Qoder CN (openapi.qoder.com.cn)
+    try:
+        token, refresh_token, user_data = await exchange_job_token_cn(personal_token)
+        uid = str(user_data.get("id") or user_data.get("userId") or user_data.get("user_id") or ("cn_" + personal_token[-12:]))
+        name = str(user_data.get("name") or user_data.get("nickname") or user_data.get("email") or "Qoder CN")
+        identity = AuthIdentity(
+            name=name,
+            aid=uid,
+            uid=uid,
+            yx_uid="",
+            organization_id="",
+            organization_name="",
+            user_type="personal_standard",
+            security_oauth_token=token,
+            refresh_token=refresh_token,
+            region="cn",
+        )
+        return new_session(identity, machine_id, machine_token, machine_type)
+    except Exception as e_cn:
+        # 2. 尝试国际版 openapi (openapi.qoder.sh)
+        try:
+            token, refresh_token, user_data = await exchange_job_token_global(personal_token)
+            uid = str(user_data.get("id") or user_data.get("userId") or user_data.get("user_id") or ("gl_" + personal_token[-12:]))
+            name = str(user_data.get("name") or "Qoder Global")
+            identity = AuthIdentity(
+                name=name,
+                aid=uid,
+                uid=uid,
+                yx_uid="",
+                organization_id="",
+                organization_name="",
+                user_type="personal_standard",
+                security_oauth_token=token,
+                refresh_token=refresh_token,
+                region="global",
+            )
+            return new_session(identity, machine_id, machine_token, machine_type)
+        except Exception:
+            pass
+
+        # 3. 兜底尝试老版 center.qoder.sh
+        try:
+            data = await exchange_job_token(personal_token, machine_id, machine_token, machine_type)
+            identity = AuthIdentity(
+                name=data.get("name", ""),
+                aid=data.get("id", ""),
+                uid=data.get("id", ""),
+                yx_uid="",
+                organization_id="",
+                organization_name="",
+                user_type=data.get("userType", "personal_standard"),
+                security_oauth_token=data.get("securityOauthToken", ""),
+                refresh_token=data.get("refreshToken", ""),
+                region="global",
+            )
+            return new_session(identity, machine_id, machine_token, machine_type)
+        except Exception as e_legacy:
+            raise RuntimeError(f"Qoder CN 验证失败: {e_cn} | 国际版验证失败: {e_legacy}")
 
 
 def load_local_session() -> SessionContext:

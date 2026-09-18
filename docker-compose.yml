@@ -1,0 +1,19 @@
+services:
+  qodergateway:
+    build: .
+    container_name: qodergateway
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - HOST=0.0.0.0
+      - PORT=5050
+      - DB_PATH=/app/data/qoder2api.db
+    networks:
+      - 9router_default
+
+networks:
+  9router_default:
+    external: true

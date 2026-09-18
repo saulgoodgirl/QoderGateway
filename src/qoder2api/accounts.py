@@ -177,6 +177,7 @@ def get_active_session() -> SessionContext:
     if not account:
         raise ValueError("No active or enabled accounts found in database. Please import or configure an account.")
 
+    region = account.get("region") or "cn"
     identity = AuthIdentity(
         name=account["name"],
         aid=account["uid"],
@@ -186,7 +187,8 @@ def get_active_session() -> SessionContext:
         organization_name="",
         user_type=account["user_type"],
         security_oauth_token=account["security_oauth_token"],
-        refresh_token=account["refresh_token"]
+        refresh_token=account["refresh_token"],
+        region=region,
     )
     
     _, machine_token, machine_type = new_machine()
@@ -223,6 +225,7 @@ def rotate_next_account(failed_uid: str, error_msg: str) -> SessionContext:
 
     db_set_settings("active_uid", next_acc["uid"])
     
+    region = next_acc.get("region") or "cn"
     identity = AuthIdentity(
         name=next_acc["name"],
         aid=next_acc["uid"],
@@ -232,7 +235,8 @@ def rotate_next_account(failed_uid: str, error_msg: str) -> SessionContext:
         organization_name="",
         user_type=next_acc["user_type"],
         security_oauth_token=next_acc["security_oauth_token"],
-        refresh_token=next_acc["refresh_token"]
+        refresh_token=next_acc["refresh_token"],
+        region=region,
     )
     _, machine_token, machine_type = new_machine()
     return new_session(

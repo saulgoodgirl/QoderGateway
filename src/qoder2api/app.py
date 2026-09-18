@@ -90,11 +90,11 @@ async def get_session() -> SessionContext:
                         """
                         INSERT OR REPLACE INTO accounts (
                             uid, name, user_type, security_oauth_token, refresh_token, machine_id,
-                            enabled, last_status, last_error
-                        ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', NULL)
+                            enabled, last_status, last_error, region
+                        ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', NULL, ?)
                         """,
                         (sess.identity.uid, sess.identity.name or "Environment PAT", sess.identity.user_type,
-                         sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id)
+                         sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id, sess.identity.region)
                     )
                 db_set_settings("active_uid", sess.identity.uid)
                 add_log(f"Imported environment PAT as account: {sess.identity.name}")
@@ -327,11 +327,11 @@ async def set_session(payload: dict[str, Any], verify: None = Depends(check_gate
                 """
                 INSERT OR REPLACE INTO accounts (
                     uid, name, user_type, security_oauth_token, refresh_token, machine_id,
-                    enabled, last_status, last_error
-                ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', ?)
+                    enabled, last_status, last_error, region
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', ?, ?)
                 """,
                 (sess.identity.uid, sess.identity.name or "PAT Account", sess.identity.user_type,
-                 sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id, None)
+                 sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id, None, sess.identity.region)
             )
             
         db_set_settings("active_uid", sess.identity.uid)
@@ -375,6 +375,30 @@ def is_account_error(exc: Exception) -> bool:
             if kw in msg:
                 return True
     return False
+
+
+@app.get("/v1/models")
+async def list_models():
+    models_list = [
+        "qmodel_38max", "qwen-3.8-max",
+        "qfmodel", "qwen-3.8-flash",
+        "qmodel_latest", "qwen-3.7-max",
+        "qmodel", "qwen-3.7-plus",
+        "q37fmodel", "qwen-3.7-flash",
+        "dmodel", "deepseek-v4-pro",
+        "dfmodel", "deepseek-flash",
+        "gmodel", "glm-5.3",
+        "gfmodel", "glm-5.3-flash",
+        "gm51model", "glm-5.2",
+        "kmodel_latest", "kimi-k3",
+        "kmodel", "kimi-k2.8",
+        "mmodel", "minimax-m2.7",
+        "auto", "lite",
+    ]
+    return {
+        "object": "list",
+        "data": [{"id": m, "object": "model", "created": 1789700000, "owned_by": "qoder"} for m in models_list]
+    }
 
 
 @app.post("/v1/chat/completions")
@@ -458,14 +482,25 @@ async def chat_completions(payload: dict[str, Any], authorization: str | None = 
     raise HTTPException(status_code=502, detail="Request failed on all available accounts.")
 
 
+@app.post("/v1/responses")
+async def responses_api(payload: dict[str, Any], authorization: str | None = Header(default=None)):
+    if "messages" not in payload and "input" in payload:
+        inp = payload["input"]
+        if isinstance(inp, str):
+            payload["messages"] = [{"role": "user", "content": inp}]
+        elif isinstance(inp, list):
+            payload["messages"] = inp
+    return await chat_completions(payload, authorization)
+
+
 def main() -> None:
     import uvicorn
 
     start_refresh_loop()  # 启动 token 定时刷新线程（每 6 小时）
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default=os.getenv("QODER_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=int(os.getenv("QODER_PORT", "5050")))
+    parser.add_argument("--host", default=os.getenv("QODER_HOST") or os.getenv("HOST") or "0.0.0.0")
+    parser.add_argument("--port", type=int, default=int(os.getenv("QODER_PORT") or os.getenv("PORT") or "5050"))
     args = parser.parse_args()
     uvicorn.run("qoder2api.app:app", host=args.host, port=args.port, reload=False)
 

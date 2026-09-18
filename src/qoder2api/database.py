@@ -8,7 +8,7 @@ from .env import load_dotenv
 
 load_dotenv()
 
-DB_PATH = Path.home() / ".qoder" / "qoder2api.db"
+DB_PATH = Path(os.getenv("DB_PATH", str(Path.home() / ".qoder" / "qoder2api.db")))
 
 
 def get_db():
@@ -74,6 +74,12 @@ def init_db():
         # token_expires_at 列（幂等：已存在则忽略）
         try:
             conn.execute("ALTER TABLE accounts ADD COLUMN token_expires_at TEXT")
+        except Exception:
+            pass
+
+        # region 列（幂等：已存在则忽略，默认 cn）
+        try:
+            conn.execute("ALTER TABLE accounts ADD COLUMN region TEXT DEFAULT 'cn'")
         except Exception:
             pass
 

@@ -15,9 +15,14 @@ import httpx
 
 from .database import get_db
 
-OPENAPI = "https://openapi.qoder.sh"
-UA = "qoder/1.1.16"
+OPENAPI_GLOBAL = "https://openapi.qoder.sh"
+OPENAPI_CN = "https://openapi.qoder.com.cn"
+UA = "pi-provider-qoder"
 REFRESH_INTERVAL = 6 * 3600  # 6 小时
+
+
+def get_openapi_url(region: str = "cn") -> str:
+    return OPENAPI_CN if (region or "").lower() == "cn" else OPENAPI_GLOBAL
 
 
 def _headers() -> dict[str, str]:
@@ -25,6 +30,8 @@ def _headers() -> dict[str, str]:
         "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": UA,
+        "Cosy-Version": "1.0.1",
+        "Cosy-ClientType": "5",
     }
 
 
@@ -32,7 +39,7 @@ def refresh_one_account(uid: str) -> dict[str, Any]:
     """用 refresh_token 刷新单个账号的 dt-/drt-，并回写数据库。"""
     with get_db() as conn:
         row = conn.execute(
-            "SELECT uid, name, refresh_token FROM accounts WHERE uid = ?", (uid,)
+            "SELECT * FROM accounts WHERE uid = ?", (uid,)
         ).fetchone()
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
@@ -40,12 +47,15 @@ def refresh_one_account(uid: str) -> dict[str, Any]:
     if not rt:
         return {"ok": False, "uid": uid, "error": "无 refresh_token"}
 
+    region = row["region"] if "region" in row.keys() else "cn"
+    base_api = get_openapi_url(region)
+
     # drt- → deviceToken/refresh；jrt- → jobToken/refresh
     if rt.startswith("jrt-"):
-        url = f"{OPENAPI}/api/v1/jobToken/refresh"
+        url = f"{base_api}/api/v1/jobToken/refresh"
         token_key = "token"
     else:
-        url = f"{OPENAPI}/api/v1/deviceToken/refresh"
+        url = f"{base_api}/api/v1/deviceToken/refresh"
         token_key = "device_token"
 
     try:
@@ -92,17 +102,19 @@ def get_account_quota(uid: str) -> dict[str, Any]:
     """查询单个账号限额（GET /api/v2/quota/usage）。"""
     with get_db() as conn:
         row = conn.execute(
-            "SELECT uid, name, security_oauth_token FROM accounts WHERE uid = ?", (uid,)
+            "SELECT * FROM accounts WHERE uid = ?", (uid,)
         ).fetchone()
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
     tok = row["security_oauth_token"] or ""
     if not tok:
         return {"ok": False, "uid": uid, "error": "无 token"}
+    region = row["region"] if "region" in row.keys() else "cn"
+    base_api = get_openapi_url(region)
     try:
         r = httpx.get(
-            f"{OPENAPI}/api/v2/quota/usage",
-            headers={"Authorization": f"Bearer {tok}", "Accept": "application/json"},
+            f"{base_api}/api/v2/quota/usage",
+            headers={"Authorization": f"Bearer {tok}", "Accept": "application/json", "User-Agent": UA},
             timeout=20,
         )
     except httpx.HTTPError as e:

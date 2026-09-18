@@ -13,6 +13,7 @@ from .auth import SessionContext, bearer_headers
 from .env import httpx_client_kwargs
 
 
+QODER_CHAT_URL_CN = "https://gateway.qoder.com.cn/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
 QODER_CHAT_URL = "https://api3.qoder.sh/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
 # 新版协议（Qoder CLI 现行）：OpenAI 兼容端点，纯 Bearer，无 COSY 签名，响应为标准 OpenAI SSE。
 # 性能远优于老版（老版默认带长 reasoning，复杂任务可到分钟级）。
@@ -238,9 +239,38 @@ def build_qoder_messages(template_messages: list[dict[str, Any]], incoming: list
     return rebuilt
 
 
+MODEL_ALIASES: dict[str, str] = {
+    "qwen-3.8-max": "qmodel_38max",
+    "qwen3.8-max": "qmodel_38max",
+    "qwen-3.8-flash": "qfmodel",
+    "qwen3.8-flash": "qfmodel",
+    "qwen-3.7-max": "qmodel_latest",
+    "qwen3.7-max": "qmodel_latest",
+    "qwen-3.7-plus": "qmodel",
+    "qwen3.7-plus": "qmodel",
+    "qwen-3.7-flash": "q37fmodel",
+    "qwen3.7-flash": "q37fmodel",
+    "deepseek-v4-pro": "dmodel",
+    "deepseek-v4": "dmodel",
+    "deepseek": "dmodel",
+    "deepseek-flash": "dfmodel",
+    "glm-5.3": "gmodel",
+    "glm-5.3-flash": "gfmodel",
+    "glm-5.2": "gm51model",
+    "kimi-k3": "kmodel_latest",
+    "kimi": "kmodel_latest",
+    "kimi-k2.8": "kmodel",
+    "minimax-m2.7": "mmodel",
+    "minimax": "mmodel",
+    "lite": "lite",
+    "auto": "auto",
+}
+
+
 def build_qoder_body(req: dict[str, Any], sess: SessionContext) -> tuple[dict[str, Any], str, bool]:
     """新版协议 body：OpenAI 原生格式，直接透传 messages/tools。"""
-    model = req.get("model") or "lite"
+    raw_model = req.get("model") or "lite"
+    model = MODEL_ALIASES.get(raw_model.lower(), raw_model)
     messages = req.get("messages") if isinstance(req.get("messages"), list) else []
     tools_enabled = bool(req.get("tools"))
     rid = str(uuid.uuid4())
@@ -336,24 +366,40 @@ class ToolCallAccumulator:
 
 
 async def qoder_stream_lines(sess: SessionContext, body: dict[str, Any], model: str) -> AsyncIterator[str]:
-    """新版协议：POST api2-v2.qoder.sh/model/v1/chat/completions，Bearer 直连。"""
-    ctx = (body.get("metadata") or {}).get("context") or {}
-    headers = {
-        "Authorization": f"Bearer {sess.identity.security_oauth_token}",
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream",
-        "User-Agent": "qoder/1.1.16",
-        "X-Request-ID": ctx.get("request_id", ""),
-        "X-Session-ID": ctx.get("session_id", ""),
-    }
-    async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15), **httpx_client_kwargs()) as client:
-        async with client.stream("POST", QODER_CHAT_URL_NEW, json=body, headers=headers) as response:
-            if response.status_code != 200:
-                text = await response.aread()
-                raise RuntimeError(f"HTTP {response.status_code} {text.decode(errors='replace')}")
-            async for line in response.aiter_lines():
-                if line:
-                    yield line
+    region = getattr(sess.identity, "region", "cn")
+    if region == "cn":
+        # 国内版 Qoder CN 走 gateway.qoder.com.cn SSE
+        chat_url = QODER_CHAT_URL_CN
+        encoded_body = encoding.encode(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
+        extra = {"x-model-key": model, "x-model-source": body.get("model_config", {}).get("source", "system")}
+        headers = bearer_headers(sess, chat_url, encoded_body, "text/event-stream", extra)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15), **httpx_client_kwargs()) as client:
+            async with client.stream("POST", chat_url, content=encoded_body, headers=headers) as response:
+                if response.status_code != 200:
+                    text = await response.aread()
+                    raise RuntimeError(f"HTTP {response.status_code} {text.decode(errors='replace')}")
+                async for line in response.aiter_lines():
+                    if line:
+                        yield line
+    else:
+        # 国际版 Qoder 走 api2-v2.qoder.sh/model/v1/chat/completions
+        ctx = (body.get("metadata") or {}).get("context") or {}
+        headers = {
+            "Authorization": f"Bearer {sess.identity.security_oauth_token}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "User-Agent": "qoder/1.1.16",
+            "X-Request-ID": ctx.get("request_id", ""),
+            "X-Session-ID": ctx.get("session_id", ""),
+        }
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15), **httpx_client_kwargs()) as client:
+            async with client.stream("POST", QODER_CHAT_URL_NEW, json=body, headers=headers) as response:
+                if response.status_code != 200:
+                    text = await response.aread()
+                    raise RuntimeError(f"HTTP {response.status_code} {text.decode(errors='replace')}")
+                async for line in response.aiter_lines():
+                    if line:
+                        yield line
 
 
 async def stream_openai_response(req: dict[str, Any], sess: SessionContext) -> AsyncIterator[str]:
