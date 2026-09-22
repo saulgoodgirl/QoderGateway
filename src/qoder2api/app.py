@@ -32,6 +32,12 @@ from .tokens import (
     get_all_accounts_quota,
     start_refresh_loop,
 )
+from .checkin import (
+    start_checkin_loop,
+    checkin_all_accounts,
+    claim_checkin,
+    get_all_accounts_checkin_overview,
+)
 
 BASE_DIR = os.path.dirname(__file__)
 INDEX_HTML = Path(BASE_DIR) / "static" / "index.html"
@@ -40,6 +46,13 @@ DOCS_HTML = Path(BASE_DIR) / "static" / "docs.html"
 
 app = FastAPI(title="qoder2api-python")
 app.mount("/assets", StaticFiles(directory=os.path.join(BASE_DIR, "static", "assets")), name="assets")
+
+
+@app.on_event("startup")
+def on_startup():
+    start_refresh_loop()
+    start_checkin_loop()
+    add_log("Background token refresh & daily auto-checkin loops started.")
 
 _session: SessionContext | None = None
 _local_auth_error: str | None = None
@@ -273,6 +286,35 @@ async def get_logs(verify: None = Depends(check_gateway_token)) -> list[str]:
     return list(logs_queue)
 
 
+@app.get("/ui/checkin/status")
+async def checkin_status_endpoint(verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """获取所有启用账号的每日签到状态与算力统计概览。"""
+    try:
+        return get_all_accounts_checkin_overview()
+    except Exception as exc:
+        add_log(f"Checkin status query error: {exc}", "ERROR")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/ui/checkin/claim")
+async def checkin_claim_endpoint(payload: dict[str, Any] | None = None, verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """执行每日签到。传入 {"uid": "..."} 签到单个账号，否则签到全部 enabled 账号。"""
+    payload = payload or {}
+    uid = payload.get("uid")
+    if uid:
+        res = claim_checkin(uid)
+        msg = res.get("message") or res.get("error")
+        add_log(f"Manual check-in for {res.get('name', uid)}: {msg}")
+        return {"status": "ok", "result": res}
+
+    res = checkin_all_accounts()
+    add_log(
+        f"Manual check-in all: claimed={res['claimed']}, already={res['already_claimed']}, "
+        f"failed={res['failed']}, credits=+{res['total_credits']}"
+    )
+    return {"status": "ok", **res}
+
+
 @app.post("/ui/registrar/start")
 async def registrar_start(payload: dict[str, Any] | None = None, verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
     """启动注册机（无限循环：parents 个母线程 × 每批 3 个子任务，直到调用 stop）。
@@ -497,6 +539,7 @@ def main() -> None:
     import uvicorn
 
     start_refresh_loop()  # 启动 token 定时刷新线程（每 6 小时）
+    start_checkin_loop()  # 启动每日自动签到线程（每天 00:05 + 启动补签）
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default=os.getenv("QODER_HOST") or os.getenv("HOST") or "0.0.0.0")

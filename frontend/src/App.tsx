@@ -17,11 +17,38 @@ interface AccountsConfig { accounts: Account[]; active_uid: string | null }
 interface UIStatus { ready: boolean; mode: string; username: string | null; uid: string | null; user_type: string | null; error: string | null; accounts_count: number }
 interface APIConfig { auth_required: boolean; allowed_keys: string[] }
 interface Message { role: 'user' | 'assistant'; content: string }
-type TabId = 'dashboard' | 'accounts' | 'playground' | 'api-keys' | 'logs' | 'register'
+type TabId = 'dashboard' | 'accounts' | 'checkin' | 'playground' | 'api-keys' | 'logs' | 'register'
 type AppTabId = TabId
 type Lang = 'en' | 'zh'
 type ToastType = 'SUCCESS' | 'ERROR' | 'INFO'
 interface ToastItem { id: number; type: ToastType; title: string; message: string }
+
+interface CheckinAccount {
+  uid: string
+  name: string
+  plan: string
+  claimed_today: boolean
+  status_text: string
+  reward_credits: number
+  streak_days: number
+  total_claim_days: number
+  quota_info: {
+    remaining: number
+    total: number
+    used: number
+  } | null
+  error: string | null
+}
+
+interface CheckinOverview {
+  total_accounts: number
+  claimed_count: number
+  pending_count: number
+  total_credits_claimed_today: number
+  total_remaining_credits: number
+  accounts: CheckinAccount[]
+  last_auto_date: string | null
+}
 
 interface RegTask {
   stage: string
@@ -44,6 +71,7 @@ interface RegStatus {
 const NAV_ITEMS: { id: AppTabId; icon: string; label: string }[] = [
   { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
   { id: 'accounts', icon: 'account_balance_wallet', label: 'Account Pool' },
+  { id: 'checkin', icon: 'card_giftcard', label: 'Daily Rewards' },
   { id: 'playground', icon: 'smart_toy', label: 'AI Playground' },
   { id: 'api-keys', icon: 'vpn_key', label: 'API Key Management' },
   { id: 'register', icon: 'person_add', label: 'Auto Registrar' },
@@ -53,19 +81,44 @@ const NAV_ITEMS: { id: AppTabId; icon: string; label: string }[] = [
 const UI_TEXT = {
   en: {
     nav: {
-      dashboard: 'Dashboard', accounts: 'Account Pool', playground: 'AI Playground', apiKeys: 'API Key Management', logs: 'Logs', register: 'Auto Registrar',
+      dashboard: 'Dashboard', accounts: 'Account Pool', checkin: 'Daily Rewards', playground: 'AI Playground', apiKeys: 'API Key Management', logs: 'Logs', register: 'Auto Registrar',
     },
     breadcrumb: {
-      dashboard: 'Control Panel / Overview', accounts: 'Console / Management', playground: 'Playground / Experiment', apiKeys: 'Administration / Security', logs: 'System / Observability', docs: 'Developer Platform / Wiki', register: 'Automation / Registrar',
+      dashboard: 'Control Panel / Overview', accounts: 'Console / Management', checkin: 'Console / Daily Rewards', playground: 'Playground / Experiment', apiKeys: 'Administration / Security', logs: 'System / Observability', docs: 'Developer Platform / Wiki', register: 'Automation / Registrar',
     },
     title: {
-      dashboard: 'System Overview', accounts: 'Account Pool', playground: 'AI Playground', apiKeys: 'API Management', logs: 'Service Logs', docs: 'Documentation', register: 'Auto Registrar',
+      dashboard: 'System Overview', accounts: 'Account Pool', checkin: 'Daily Rewards & Check-in', playground: 'AI Playground', apiKeys: 'API Management', logs: 'Service Logs', docs: 'Documentation', register: 'Auto Registrar',
     },
     common: { docs: 'Docs', support: 'Support', healthy: 'Healthy', offline: 'Offline', signOut: 'Sign Out', refresh: 'Refresh', add: 'Add', delete: 'Delete', copy: 'Copy' },
     dashboard: {
       serviceStatus: 'Service Status', allGatewaysActive: 'All gateways active', noActiveSession: 'No active session', accountPool: 'Account Pool', activeSessions: 'Active Qoder accounts', apiAuth: 'API Auth', openAccess: 'Open access', activeUser: 'Active User', systemBriefing: 'System Briefing', readyBrief: 'Gateway is running. {count} account(s) are available for routing.', notReadyBrief: 'No active session is available. Import an account or add a PAT first.', recentNotifications: 'Recent Notifications', authImportError: 'Auth Import Error', sessionActive: 'Session Active', credentialConfig: 'Credential Configuration', credentialDesc: 'Add a Qoder PAT or import the current local Qoder auth session.', patPlaceholder: 'Enter Qoder PAT...', addPat: 'Add PAT', saving: 'Saving...', autoImport: 'Auto Import',
     },
     accounts: { desc: 'Manage Qoder accounts used by the gateway for request routing and failover.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add a PAT from Dashboard.', showing: 'Showing {count} account(s)' },
+    checkin: {
+      bannerTitle: 'Daily Rewards · 100 Credits Per Account',
+      desc: 'Claim 100 free compute credits every day for each Qoder account. Background auto-worker runs daily at 00:05 (UTC+8) to claim automatically.',
+      claimAll: 'Claim All Accounts Today',
+      claiming: 'Claiming Rewards...',
+      refresh: 'Refresh Status',
+      allClaimedBadge: 'All accounts claimed today (+100 Credits each)',
+      pendingBadge: 'Accounts pending claim today',
+      statsClaimedRate: 'Claimed Today',
+      statsCreditsToday: 'Credits Claimed Today',
+      statsTotalCredits: 'Pool Remaining Credits',
+      statsAutoSchedule: 'Auto Check-in Daemon',
+      statsAutoScheduleDesc: 'Active · Runs daily at 00:05',
+      tableTitle: 'Account Check-in & Credit Balance',
+      colAccount: 'Account',
+      colPlan: 'Plan Tier',
+      colStatus: 'Today\'s Status',
+      colStreak: 'Streak Days',
+      colQuota: 'Available Credits',
+      colActions: 'Action',
+      btnClaimOne: 'Claim Now',
+      claimedStatus: 'Claimed (+100)',
+      pendingStatus: 'Pending',
+      empty: 'No enabled accounts found. Import accounts or add a PAT first.',
+    },
     playground: { modelConfig: 'Model Configuration', streamResponse: 'Stream Response', systemPrompt: 'System Prompt', systemPromptPlaceholder: "Define the AI's persona...", ask: 'Ask anything...', send: 'Send', waiting: 'Waiting for response...' },
     api: { generate: 'Generate New Key', desc: 'Manage authentication keys and gateway access permissions for client requests.', gatewayAuth: 'Gateway Authentication', gatewayAuthDesc: 'Toggle API key validation for incoming /v1 requests.', systemStatus: 'System Status', activeKeys: 'Active Keys', configured: 'configured', activeAccessKeys: 'Active Access Keys', keyPlaceholder: 'Enter or paste a key...', noKeys: 'No API keys configured. Generate one above.', bestPractices: 'Security Best Practices', bestPracticesDesc: 'Do not expose API keys in client-side code. Rotate keys when they appear in logs, screenshots, or shared scripts.', securityPolicy: 'Security Policy' },
     logs: { account: 'Account', status: 'Status', range: 'Range', allAccounts: 'All Accounts', allStatuses: 'All Statuses', last24h: 'Last 24h', lastHour: 'Last hour', last7d: 'Last 7 days', noLogs: 'No logs available', noMatch: 'No logs match current filters', timestamp: 'Timestamp', level: 'Level', message: 'Message' },
@@ -101,19 +154,44 @@ const UI_TEXT = {
   },
   zh: {
     nav: {
-      dashboard: '控制台', accounts: '账号池', playground: '调试对话', apiKeys: 'API Key 管理', logs: '服务日志', register: '自动注册机',
+      dashboard: '控制台', accounts: '账号池', checkin: '每日签到', playground: '调试对话', apiKeys: 'API Key 管理', logs: '服务日志', register: '自动注册机',
     },
     breadcrumb: {
-      dashboard: '控制台 / 概览', accounts: '控制台 / 账号管理', playground: '调试 / 对话测试', apiKeys: '管理 / 安全', logs: '系统 / 日志', docs: '开发者平台 / 文档', register: '自动化 / 注册机',
+      dashboard: '控制台 / 概览', accounts: '控制台 / 账号管理', checkin: '控制台 / 每日签到', playground: '调试 / 对话测试', apiKeys: '管理 / 安全', logs: '系统 / 日志', docs: '开发者平台 / 文档', register: '自动化 / 注册机',
     },
     title: {
-      dashboard: '系统概览', accounts: '账号池', playground: '调试对话', apiKeys: 'API 管理', logs: '服务日志', docs: '文档', register: '自动注册机',
+      dashboard: '系统概览', accounts: '账号池', checkin: '每日签到 · 积分中心', playground: '调试对话', apiKeys: 'API 管理', logs: '服务日志', docs: '文档', register: '自动注册机',
     },
     common: { docs: '文档', support: '支持', healthy: '正常', offline: '未就绪', signOut: '退出', refresh: '刷新', add: '添加', delete: '删除', copy: '复制' },
     dashboard: {
       serviceStatus: '服务状态', allGatewaysActive: '网关可用', noActiveSession: '没有可用账号', accountPool: '账号池', activeSessions: '可参与路由的 Qoder 账号', apiAuth: 'API 鉴权', openAccess: '未开启鉴权', activeUser: '当前账号', systemBriefing: '运行状态', readyBrief: '网关正在运行，当前有 {count} 个账号可用于请求路由。', notReadyBrief: '当前没有可用会话，请先导入账号或添加 PAT。', recentNotifications: '最近状态', authImportError: '本地登录导入失败', sessionActive: '账号已连接', credentialConfig: '凭据配置', credentialDesc: '添加 Qoder PAT，或导入本机已有的 Qoder 登录会话。', patPlaceholder: '输入 Qoder PAT...', addPat: '添加 PAT', saving: '保存中...', autoImport: '自动导入',
     },
     accounts: { desc: '管理网关用于请求路由和失败切换的 Qoder 账号。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击导入账号，或在控制台添加 PAT。', showing: '共 {count} 个账号' },
+    checkin: {
+      bannerTitle: '每日签到福利 · 每个账号 +100 Credits',
+      desc: '每个 Qoder 账号每天可免费领取 100 算力 Credits。网关后台守护线程将在每日 00:05（北京时间）自动执行签到补领，也可随时一键为全部账号领完。',
+      claimAll: '一键签到全部账号',
+      claiming: '正在签到领取中...',
+      refresh: '刷新签到状态',
+      allClaimedBadge: '今日已全部完成签到 (算力已到账)',
+      pendingBadge: '今日有待签到账号，点击一键领取',
+      statsClaimedRate: '今日签到进度',
+      statsCreditsToday: '今日已领算力',
+      statsTotalCredits: '账号池可用总算力',
+      statsAutoSchedule: '自动签到守护',
+      statsAutoScheduleDesc: '运行中 · 每日 00:05 定时执行',
+      tableTitle: '账号签到状态与算力明细',
+      colAccount: '账号 / 用户名',
+      colPlan: '套餐类型',
+      colStatus: '今日签到状态',
+      colStreak: '连续签到',
+      colQuota: '当前可用算力',
+      colActions: '操作',
+      btnClaimOne: '立即签到',
+      claimedStatus: '已签到 (+100)',
+      pendingStatus: '待签到',
+      empty: '当前账号池无已启用账号。请先在「账号池」或「控制台」导入账号或添加 PAT。',
+    },
     playground: { modelConfig: '模型配置', streamResponse: '流式响应', systemPrompt: '系统提示词', systemPromptPlaceholder: '定义模型的角色或行为...', ask: '输入要发送的内容...', send: '发送', waiting: '正在等待响应...' },
     api: { generate: '生成新 Key', desc: '管理客户端请求网关时使用的 API Key 和访问权限。', gatewayAuth: '网关 API 鉴权', gatewayAuthDesc: '控制 /v1 请求是否必须携带 API Key。', systemStatus: '系统状态', activeKeys: '可用 Key', configured: '已配置', activeAccessKeys: '已启用的 API Key', keyPlaceholder: '输入或粘贴 API Key...', noKeys: '还没有配置 API Key。请先生成并添加。', bestPractices: '安全建议', bestPracticesDesc: '不要把 API Key 写在前端代码里。如果 Key 出现在日志、截图或共享脚本中，请及时删除并重新生成。', securityPolicy: '安全策略' },
     logs: { account: '账号', status: '级别', range: '时间范围', allAccounts: '全部账号', allStatuses: '全部级别', last24h: '最近 24 小时', lastHour: '最近 1 小时', last7d: '最近 7 天', noLogs: '暂无日志', noMatch: '没有匹配当前筛选条件的日志', timestamp: '时间', level: '级别', message: '内容' },
@@ -354,6 +432,11 @@ export default function App() {
   const [regStopping, setRegStopping] = useState(false)
   const [regCount, setRegCount] = useState(2)
 
+  const [checkinData, setCheckinData] = useState<CheckinOverview | null>(null)
+  const [loadingCheckin, setLoadingCheckin] = useState(false)
+  const [claimingCheckin, setClaimingCheckin] = useState(false)
+  const [claimingUid, setClaimingUid] = useState<string | null>(null)
+
   const switchLang = (next: Lang) => {
     setLang(next)
     localStorage.setItem('qodergate_lang', next)
@@ -386,6 +469,7 @@ export default function App() {
   const navLabels: Record<AppTabId, string> = {
     dashboard: t.nav.dashboard,
     accounts: t.nav.accounts,
+    checkin: t.nav.checkin,
     playground: t.nav.playground,
     'api-keys': t.nav.apiKeys,
     logs: t.nav.logs,
@@ -394,6 +478,7 @@ export default function App() {
   const pageMeta: Record<AppTabId, { bc: string; title: string }> = {
     dashboard: { bc: t.breadcrumb.dashboard, title: t.title.dashboard },
     accounts: { bc: t.breadcrumb.accounts, title: t.title.accounts },
+    checkin: { bc: t.breadcrumb.checkin, title: t.title.checkin },
     playground: { bc: t.breadcrumb.playground, title: t.title.playground },
     'api-keys': { bc: t.breadcrumb.apiKeys, title: t.title.apiKeys },
     logs: { bc: t.breadcrumb.logs, title: t.title.logs },
@@ -522,14 +607,85 @@ export default function App() {
     } catch { pushToast('ERROR', lang === 'zh' ? '取消失败' : 'Stop failed', '') } finally { setRegStopping(false) }
   }, [authedFetch, pushToast, regStatus?.running, regStopping, lang])
 
+  const fetchCheckinStatus = useCallback(async () => {
+    setLoadingCheckin(true)
+    try {
+      const resp = await authedFetch('/ui/checkin/status')
+      if (resp.ok) {
+        const data = await resp.json()
+        setCheckinData(data)
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setLoadingCheckin(false)
+    }
+  }, [authedFetch])
+
+  const doClaimAllCheckin = useCallback(async () => {
+    setClaimingCheckin(true)
+    try {
+      const resp = await authedFetch('/ui/checkin/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await resp.json()
+      if (data.status === 'ok') {
+        pushToast(
+          'SUCCESS',
+          lang === 'zh' ? '每日签到完成' : 'Daily Check-in Completed',
+          lang === 'zh'
+            ? `成功签到 ${data.claimed} 个账号，今日已签 ${data.already_claimed} 个，失败 ${data.failed} 个，获得 +${data.total_credits} Credits`
+            : `Claimed ${data.claimed}, already ${data.already_claimed}, failed ${data.failed}, +${data.total_credits} credits`
+        )
+        fetchCheckinStatus()
+      } else {
+        pushToast('ERROR', lang === 'zh' ? '签到失败' : 'Check-in failed', data.error || '')
+      }
+    } catch (err: any) {
+      pushToast('ERROR', lang === 'zh' ? '签到失败' : 'Check-in failed', err.message)
+    } finally {
+      setClaimingCheckin(false)
+    }
+  }, [authedFetch, lang, pushToast, fetchCheckinStatus])
+
+  const doClaimOneCheckin = useCallback(async (uid: string) => {
+    setClaimingUid(uid)
+    try {
+      const resp = await authedFetch('/ui/checkin/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid }),
+      })
+      const data = await resp.json()
+      if (data.status === 'ok') {
+        const r = data.result || {}
+        pushToast(
+          r.claimed ? 'SUCCESS' : 'INFO',
+          r.claimed ? (lang === 'zh' ? '签到成功！' : 'Claimed!') : (lang === 'zh' ? '提示' : 'Notice'),
+          r.message || (lang === 'zh' ? '状态已更新' : 'Updated')
+        )
+        fetchCheckinStatus()
+      } else {
+        pushToast('ERROR', lang === 'zh' ? '签到失败' : 'Claim failed', data.error || '')
+      }
+    } catch (err: any) {
+      pushToast('ERROR', lang === 'zh' ? '签到失败' : 'Claim failed', err.message)
+    } finally {
+      setClaimingUid(null)
+    }
+  }, [authedFetch, lang, pushToast, fetchCheckinStatus])
+
   useEffect(() => {
     if (!token) return
-    fetchStatus(); fetchAccounts(); fetchApiConfig(); fetchLogs(); fetchRegStatus()
+    fetchStatus(); fetchAccounts(); fetchApiConfig(); fetchLogs(); fetchRegStatus(); fetchCheckinStatus()
     const si = setInterval(fetchStatus, 6000)
     const li = setInterval(() => { if (activeTab === 'logs') fetchLogs() }, 3000)
     const ri = setInterval(() => { if (activeTab === 'register' && regStatus?.running) fetchRegStatus() }, 2000)
-    return () => { clearInterval(si); clearInterval(li); clearInterval(ri) }
-  }, [token, activeTab, fetchStatus, fetchAccounts, fetchApiConfig, fetchLogs, fetchRegStatus, regStatus?.running])
+    const ci = setInterval(() => { if (activeTab === 'checkin') fetchCheckinStatus() }, 8000)
+    return () => { clearInterval(si); clearInterval(li); clearInterval(ri); clearInterval(ci) }
+  }, [token, activeTab, fetchStatus, fetchAccounts, fetchApiConfig, fetchLogs, fetchRegStatus, fetchCheckinStatus, regStatus?.running])
 
   useEffect(() => { if (activeTab === 'logs') logEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs, activeTab])
   useEffect(() => { if (activeTab === 'playground') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages, activeTab])
@@ -1091,6 +1247,247 @@ export default function App() {
                 </div>
                 <div className="px-6 py-5 flex items-center justify-between border-t border-hairline bg-canvas-soft/20">
                   <p className="text-[11px] text-body uppercase tracking-wider">{t.accounts.showing.replace('{count}', String(accountsConfig.accounts.length))}</p>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {/* ─── DAILY REWARDS & CHECK-IN ─── */}
+          {activeTab === 'checkin' && (
+            <div className="space-y-8">
+              {/* Hero Banner */}
+              <section className="relative overflow-hidden rounded-2xl border border-hairline bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-emerald-500/10 p-8 backdrop-blur-md">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                  <div className="flex items-start gap-5">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/20 shrink-0">
+                      <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>card_giftcard</span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h3 className="font-display-md text-ink">{t.checkin.bannerTitle}</h3>
+                        {((checkinData?.pending_count ?? 0) === 0 && (checkinData?.total_accounts ?? 0) > 0) ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            {t.checkin.allClaimedBadge}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                            {t.checkin.pendingBadge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-body text-sm mt-2 max-w-2xl leading-relaxed">{t.checkin.desc}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button
+                      onClick={fetchCheckinStatus}
+                      disabled={loadingCheckin}
+                      className="flex items-center gap-2 px-4 py-3 text-body hover:text-ink transition-colors font-bold text-sm bg-white/70 hover:bg-white border border-hairline rounded-xl cursor-pointer"
+                    >
+                      <span className={`material-symbols-outlined text-[18px] ${loadingCheckin ? 'animate-spin' : ''}`}>refresh</span>
+                      {t.checkin.refresh}
+                    </button>
+                    <button
+                      onClick={doClaimAllCheckin}
+                      disabled={claimingCheckin || ((checkinData?.pending_count ?? 0) === 0 && (checkinData?.total_accounts ?? 0) > 0)}
+                      className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl transition-all font-bold text-sm shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      {claimingCheckin ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>{t.checkin.claiming}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
+                          <span>{t.checkin.claimAll}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* 4 Stats Cards */}
+              <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                    <span>{t.checkin.statsClaimedRate}</span>
+                    <span className="material-symbols-outlined text-base text-emerald-500">task_alt</span>
+                  </div>
+                  <div className="text-3xl font-bold text-ink">
+                    {checkinData?.claimed_count ?? 0}
+                    <span className="text-base font-normal text-body ml-1">/ {checkinData?.total_accounts ?? 0}</span>
+                  </div>
+                  <div className="mt-3 w-full bg-hairline h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${(checkinData?.total_accounts ?? 0) > 0 ? ((checkinData?.claimed_count ?? 0) / (checkinData?.total_accounts ?? 1)) * 100 : 0}%`
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                    <span>{t.checkin.statsCreditsToday}</span>
+                    <span className="material-symbols-outlined text-base text-amber-500" style={{ fontVariationSettings: "'FILL' 1" }}>military_tech</span>
+                  </div>
+                  <div className="text-3xl font-bold text-amber-600">
+                    +{checkinData?.total_credits_claimed_today ?? 0}
+                    <span className="text-xs font-semibold text-body ml-1 uppercase">Credits</span>
+                  </div>
+                  <div className="text-xs text-body mt-2">
+                    {lang === 'zh' ? '每个账号单次奖励 100 Credits' : '+100 credits per successful account'}
+                  </div>
+                </div>
+
+                <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                    <span>{t.checkin.statsTotalCredits}</span>
+                    <span className="material-symbols-outlined text-base text-purple-500">token</span>
+                  </div>
+                  <div className="text-3xl font-bold text-ink">
+                    {checkinData?.total_remaining_credits?.toLocaleString() ?? '--'}
+                    <span className="text-xs font-semibold text-body ml-1 uppercase">Credits</span>
+                  </div>
+                  <div className="text-xs text-body mt-2">
+                    {lang === 'zh' ? '账号池可用总剩余算力' : 'Total remaining across all pool accounts'}
+                  </div>
+                </div>
+
+                <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                    <span>{t.checkin.statsAutoSchedule}</span>
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mint opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-mint"></span>
+                    </span>
+                  </div>
+                  <div className="text-xl font-bold text-ink flex items-center gap-2">
+                    <span>每日 00:05</span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-mint/20 text-ink font-bold">ACTIVE</span>
+                  </div>
+                  <div className="text-xs text-body mt-2">
+                    {t.checkin.statsAutoScheduleDesc}
+                  </div>
+                </div>
+              </section>
+
+              {/* Accounts Table */}
+              <section className="glass-card rounded-2xl border border-hairline overflow-hidden shadow-sm">
+                <div className="px-6 py-4 border-b border-hairline flex items-center justify-between bg-canvas-soft/30">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-ink text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>card_giftcard</span>
+                    <h4 className="text-sm font-bold text-ink">{t.checkin.tableTitle}</h4>
+                  </div>
+                  <div className="text-xs text-body">
+                    {lang === 'zh' ? `共 ${checkinData?.accounts?.length ?? 0} 个账号` : `${checkinData?.accounts?.length ?? 0} accounts`}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-canvas-soft border-b border-hairline">
+                      <tr>
+                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colAccount}</th>
+                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colPlan}</th>
+                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colStatus}</th>
+                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colStreak}</th>
+                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colQuota}</th>
+                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider text-right">{t.checkin.colActions}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-hairline">
+                      {(!checkinData?.accounts || checkinData.accounts.length === 0) ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-xs text-body">
+                            {t.checkin.empty}
+                          </td>
+                        </tr>
+                      ) : (
+                        checkinData.accounts.map((acc) => (
+                          <tr key={acc.uid} className="hover:bg-canvas-soft transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="font-bold text-ink">{acc.name}</div>
+                              <div className="font-mono text-[11px] text-body opacity-60 select-all">{acc.uid}</div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-neutral-100 text-neutral-700 capitalize">
+                                {acc.plan || 'Teams'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {acc.claimed_today ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                  <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                                  {t.checkin.claimedStatus}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                  <span className="material-symbols-outlined text-[14px]">schedule</span>
+                                  {t.checkin.pendingStatus}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 font-mono text-sm text-ink">
+                              {acc.streak_days} <span className="text-xs text-body font-normal">{lang === 'zh' ? '天' : 'days'}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {acc.quota_info ? (
+                                <div className="space-y-1">
+                                  <div className="font-mono text-xs font-semibold text-ink">
+                                    {acc.quota_info.remaining?.toLocaleString()} <span className="text-[10px] text-body font-normal">/ {acc.quota_info.total?.toLocaleString()} Credits</span>
+                                  </div>
+                                  <div className="w-28 bg-hairline h-1.5 rounded-full overflow-hidden">
+                                    <div
+                                      className="bg-mint h-full rounded-full"
+                                      style={{
+                                        width: `${Math.min(100, Math.max(5, (acc.quota_info.remaining / (acc.quota_info.total || 1)) * 100))}%`
+                                      }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-xs font-mono text-body">--</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                onClick={() => doClaimOneCheckin(acc.uid)}
+                                disabled={acc.claimed_today || claimingUid === acc.uid}
+                                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                  acc.claimed_today
+                                    ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
+                                    : 'bg-ink text-white hover:bg-neutral-800 shadow-sm cursor-pointer'
+                                }`}
+                              >
+                                {claimingUid === acc.uid ? (
+                                  <span className="inline-flex items-center gap-1">
+                                    <svg className="animate-spin h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    ...
+                                  </span>
+                                ) : acc.claimed_today ? (
+                                  (lang === 'zh' ? '今日已签' : 'Claimed')
+                                ) : (
+                                  t.checkin.btnClaimOne
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </section>
             </div>
