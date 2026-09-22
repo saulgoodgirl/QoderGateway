@@ -221,6 +221,7 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
     # 简单调用 status 或尝试轻量 claim 校验
     for r in rows:
         uid = r["uid"]
+        name = r["name"]
         # 从 quota_raw 或数据库动态识别是否为企业/团队版
         raw_u_type = str(r["user_type"] or "").lower()
         plan = str(r["plan"] or ("Teams" if "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type else "Personal"))
