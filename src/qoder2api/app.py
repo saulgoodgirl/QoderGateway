@@ -532,7 +532,9 @@ async def chat_completions(
     else:
         model = raw_model
 
-    header_target = (x_account_uid or x_account or "").strip() or None
+    import urllib.parse
+    raw_header_target = (x_account_uid or x_account or "").strip() or None
+    header_target = urllib.parse.unquote(raw_header_target) if raw_header_target else None
     target_account = bound_account or header_target or model_target or None
 
     stream = bool(payload.get("stream", False))
