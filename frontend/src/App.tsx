@@ -20,6 +20,13 @@ interface AccountsConfig { accounts: Account[]; active_uid: string | null }
 interface UIStatus { ready: boolean; mode: string; username: string | null; uid: string | null; user_type: string | null; error: string | null; accounts_count: number }
 interface KeyDetail { api_key: string; name?: string; account_uid?: string; account_uids?: string[] }
 interface APIConfig { auth_required: boolean; allowed_keys: string[]; allowed_keys_detail?: KeyDetail[] }
+interface CodexModelItem {
+  id: string
+  contextWindow: string
+  autoCompress: string
+  imageMode: string
+  recommended?: boolean
+}
 interface Message { role: 'user' | 'assistant'; content: string }
 type TabId = 'dashboard' | 'accounts' | 'checkin' | 'playground' | 'api-keys' | 'logs' | 'register'
 type AppTabId = TabId
@@ -536,6 +543,34 @@ function MultiAccountSelect({
   )
 }
 
+const DEFAULT_CODEX_MODELS: CodexModelItem[] = [
+  { id: 'kimi-k3', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
+  { id: 'deepseek-v4-pro', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
+  { id: 'qwen-3.8-max', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
+  { id: 'glm-5.3', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
+  { id: 'minimax-m2.7', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'auto', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'lite', contextWindow: '128K', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'kimi-k2.8', contextWindow: '200K', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'deepseek-flash', contextWindow: '128K', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'qwen-3.8-flash', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'qwen-3.7-max', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'qwen-3.7-plus', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'glm-5.3-flash', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
+  { id: 'glm-5.2', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
+]
+
+const getModelVendorInfo = (id: string) => {
+  const lower = id.toLowerCase()
+  if (lower.includes('@')) return { vendor: '账号专属靶向', badge: 'bg-purple-900/40 text-purple-300 border border-purple-700/60' }
+  if (lower.startsWith('kimi') || lower.startsWith('kmodel')) return { vendor: '月之暗面 Moonshot', badge: 'bg-blue-900/40 text-blue-300 border border-blue-700/60' }
+  if (lower.startsWith('deepseek') || lower.startsWith('dmodel') || lower.startsWith('dfmodel')) return { vendor: '深度求索 DeepSeek', badge: 'bg-indigo-900/40 text-indigo-300 border border-indigo-700/60' }
+  if (lower.startsWith('qwen') || lower.startsWith('qmodel') || lower.startsWith('qfmodel') || lower.startsWith('q37fmodel')) return { vendor: '阿里通义 Qwen', badge: 'bg-amber-900/40 text-amber-300 border border-amber-700/60' }
+  if (lower.startsWith('glm') || lower.startsWith('gmodel') || lower.startsWith('gfmodel') || lower.startsWith('gm51model')) return { vendor: '智谱 GLM', badge: 'bg-cyan-900/40 text-cyan-300 border border-cyan-700/60' }
+  if (lower.startsWith('minimax') || lower.startsWith('mmodel')) return { vendor: 'MiniMax', badge: 'bg-rose-900/40 text-rose-300 border border-rose-700/60' }
+  return { vendor: 'Qoder 原生', badge: 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/60' }
+}
+
 function CustomInput({ value, onChange, placeholder, type = 'text', className = '', mono = false }: {
   value: string; onChange: (v: string) => void; placeholder?: string; type?: string; className?: string; mono?: boolean
 }) {
@@ -653,6 +688,21 @@ export default function App() {
   const [newKeyName, setNewKeyName] = useState('')
   const [playgroundTargetAccount, setPlaygroundTargetAccount] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [selectedBaseUrlPreset, setSelectedBaseUrlPreset] = useState<'cloud' | 'local' | 'current' | 'custom'>('cloud')
+  const [customBaseUrl, setCustomBaseUrl] = useState('')
+  const [selectedApiKeyForCodex, setSelectedApiKeyForCodex] = useState<string>('')
+  const [showCodexApiKey, setShowCodexApiKey] = useState(false)
+  const [upstreamProtocol, setUpstreamProtocol] = useState<'chat' | 'responses'>('chat')
+  const [codexModels, setCodexModels] = useState<CodexModelItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('qodergate_codex_models')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return DEFAULT_CODEX_MODELS
+  })
+  const [newModelNameInput, setNewModelNameInput] = useState('')
+  const [fetchingUpstreamModels, setFetchingUpstreamModels] = useState(false)
+  const [targetAccountForModel, setTargetAccountForModel] = useState('')
   const [patToken, setPatToken] = useState('')
   const [submittingPat, setSubmittingPat] = useState(false)
   const [searchAccounts, setSearchAccounts] = useState('')
@@ -1188,6 +1238,153 @@ export default function App() {
     setCopiedKey(key)
     pushToast('INFO', lang === 'zh' ? '已复制' : 'Copied', msg.copied)
     setTimeout(() => setCopiedKey(null), 2000)
+  }
+
+  const resolvedBaseUrl = selectedBaseUrlPreset === 'cloud'
+    ? 'https://lite.bigbob.asia/v1'
+    : selectedBaseUrlPreset === 'local'
+    ? 'http://127.0.0.1:5050/v1'
+    : selectedBaseUrlPreset === 'current' && typeof window !== 'undefined'
+    ? `${window.location.origin}/v1`
+    : selectedBaseUrlPreset === 'custom' && customBaseUrl.trim()
+    ? customBaseUrl.trim()
+    : 'https://lite.bigbob.asia/v1'
+
+  const effectiveCodexKey = selectedApiKeyForCodex || (apiConfig.allowed_keys.length > 0 ? apiConfig.allowed_keys[0] : 'qg_live_42adacf1b759ee4e6e8a7ea99f9eb350')
+
+  const handleSaveCodexModels = (newList: CodexModelItem[]) => {
+    setCodexModels(newList)
+    try {
+      localStorage.setItem('qodergate_codex_models', JSON.stringify(newList))
+    } catch {}
+  }
+
+  const handleCopyBaseUrl = () => {
+    navigator.clipboard.writeText(resolvedBaseUrl)
+    pushToast('SUCCESS', lang === 'zh' ? '已复制 Base URL' : 'Copied Base URL', resolvedBaseUrl)
+  }
+
+  const handleCopyCodexKey = () => {
+    navigator.clipboard.writeText(effectiveCodexKey)
+    pushToast('SUCCESS', lang === 'zh' ? '已复制 API Key' : 'Copied API Key', effectiveCodexKey.substring(0, 16) + '...')
+  }
+
+  const handleCopyAllModels = () => {
+    const list = codexModels.map(m => m.id).join('\n')
+    navigator.clipboard.writeText(list)
+    pushToast(
+      'SUCCESS',
+      lang === 'zh' ? '已复制全部模型名称' : 'Copied All Models',
+      lang === 'zh' ? `共 ${codexModels.length} 个模型已换行复制，可直接粘贴进 Codex++ 或客户端` : `Copied ${codexModels.length} models to clipboard`
+    )
+  }
+
+  const handleCopyCodexJson = () => {
+    const configObj = {
+      name: "QoderGateway",
+      baseUrl: resolvedBaseUrl,
+      apiKey: effectiveCodexKey,
+      protocol: upstreamProtocol === 'chat' ? "Chat Completions" : "Responses API",
+      sessionIdentity: "Custom",
+      models: codexModels.map(m => ({
+        name: m.id,
+        contextWindow: m.contextWindow,
+        autoCompress: m.autoCompress,
+        imageHandling: m.imageMode
+      }))
+    }
+    navigator.clipboard.writeText(JSON.stringify(configObj, null, 2))
+    pushToast('SUCCESS', lang === 'zh' ? '已复制 Codex++ 配置' : 'Copied Codex Config', lang === 'zh' ? '完整配置 JSON 已复制到剪贴板' : 'Full config JSON copied')
+  }
+
+  const handleCopyCurl = () => {
+    const firstModel = codexModels[0]?.id || 'kimi-k3'
+    const cmd = `curl -X POST "${resolvedBaseUrl}/chat/completions" \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${effectiveCodexKey}" \\\n  -d '{\n    "model": "${firstModel}",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`
+    navigator.clipboard.writeText(cmd)
+    pushToast('SUCCESS', lang === 'zh' ? '已复制 cURL 命令' : 'Copied cURL', lang === 'zh' ? '终端测试命令已复制' : 'Command copied')
+  }
+
+  const handleFetchUpstreamModels = async () => {
+    setFetchingUpstreamModels(true)
+    try {
+      const res = await fetch('/v1/models')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      const fetchedIds: string[] = (data.data || []).map((item: any) => item.id).filter(Boolean)
+      
+      const existingMap = new Map(codexModels.map(m => [m.id, m]))
+      const merged: CodexModelItem[] = [...codexModels]
+      
+      let addedCount = 0
+      for (const id of fetchedIds) {
+        if (!existingMap.has(id)) {
+          merged.push({
+            id,
+            contextWindow: '1M',
+            autoCompress: '90%',
+            imageMode: '原样发送图片',
+          })
+          addedCount++
+        }
+      }
+      handleSaveCodexModels(merged)
+      pushToast(
+        'SUCCESS',
+        lang === 'zh' ? '已从上游同步模型' : 'Models Synced',
+        lang === 'zh' ? `从网关成功拉取模型，新增 ${addedCount} 个可用模型` : `Synced models, added ${addedCount} new models`
+      )
+    } catch (e: any) {
+      pushToast('ERROR', lang === 'zh' ? '拉取模型失败' : 'Fetch Failed', String(e.message || e))
+    } finally {
+      setFetchingUpstreamModels(false)
+    }
+  }
+
+  const handleAddCodexModel = () => {
+    const trimmed = newModelNameInput.trim()
+    if (!trimmed) return
+    if (codexModels.some(m => m.id === trimmed)) {
+      pushToast('ERROR', lang === 'zh' ? '模型已存在' : 'Model Exists', lang === 'zh' ? `模型 ${trimmed} 已经在列表中` : `Model already in list`)
+      return
+    }
+    const updated = [
+      { id: trimmed, contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
+      ...codexModels
+    ]
+    handleSaveCodexModels(updated)
+    setNewModelNameInput('')
+    pushToast('SUCCESS', lang === 'zh' ? '已添加模型' : 'Model Added', lang === 'zh' ? `模型 ${trimmed} 已加入列表` : `Added ${trimmed}`)
+  }
+
+  const handleAddTargetAccountModel = (accountName: string) => {
+    if (!accountName) return
+    const targetModelId = `kimi-k3@${accountName}`
+    if (codexModels.some(m => m.id === targetModelId)) {
+      pushToast('INFO', lang === 'zh' ? '靶向模型已存在' : 'Model Exists', `${targetModelId} 已在列表中`)
+      return
+    }
+    const updated = [
+      { id: targetModelId, contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
+      ...codexModels
+    ]
+    handleSaveCodexModels(updated)
+    pushToast('SUCCESS', lang === 'zh' ? '已添加靶向模型' : 'Target Model Added', lang === 'zh' ? `在客户端中选择 ${targetModelId} 即可单独调用该账号！` : `Model ${targetModelId} ready`)
+  }
+
+  const handleRemoveCodexModel = (id: string) => {
+    const updated = codexModels.filter(m => m.id !== id)
+    handleSaveCodexModels(updated)
+    pushToast('INFO', lang === 'zh' ? '已移除模型' : 'Model Removed', id)
+  }
+
+  const handleUpdateCodexModelItem = (id: string, field: keyof CodexModelItem, val: string) => {
+    const updated = codexModels.map(m => m.id === id ? { ...m, [field]: val } : m)
+    handleSaveCodexModels(updated)
+  }
+
+  const handleResetCodexModels = () => {
+    handleSaveCodexModels(DEFAULT_CODEX_MODELS)
+    pushToast('INFO', lang === 'zh' ? '已恢复默认模型' : 'Models Reset', lang === 'zh' ? '已重置为官方推荐模型列表' : 'Reset to default model list')
   }
 
   const handleRefreshStatus = () => {
@@ -2146,6 +2343,413 @@ export default function App() {
                         })}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* ─── CODEX++ & CLIENT INTEGRATION SECTION ─── */}
+              <div className="bg-[#15171c] text-white rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl border border-neutral-800">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-neutral-800">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <span className="p-2 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md">
+                        <span className="material-symbols-outlined text-[20px]">tune</span>
+                      </span>
+                      <h3 className="font-bold text-lg text-white">
+                        {lang === 'zh' ? 'Codex++ / 客户端 API 接入设置' : 'Codex++ / Client API Settings'}
+                      </h3>
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2 py-0.5 rounded-full">
+                        OpenAI Compatible
+                      </span>
+                    </div>
+                    <p className="text-neutral-400 text-xs mt-1.5 max-w-2xl">
+                      {lang === 'zh'
+                        ? '1:1 参照 Codex++ 供应商设置规范构建。一键复制 Base URL、Key 与可用模型矩阵，直接导入 Codex++、Cursor、Cherry Studio、NextChat、ZCode。'
+                        : 'Built matching Codex++ provider specs. One-click copy Base URL, Key, and model matrix into Codex++, Cursor, and other tools.'}
+                    </p>
+                  </div>
+
+                  {/* Quick Export Tools */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleCopyAllModels}
+                      className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                      title={lang === 'zh' ? '每行一个模型名，换行隔开，可直接粘贴进 Codex++ 模型列表框' : 'Copy newline-separated model IDs'}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                      <span>{lang === 'zh' ? '复制全部模型名' : 'Copy All Models'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleCopyCodexJson}
+                      className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                      title={lang === 'zh' ? '复制 Codex++ 完整供应商配置 JSON' : 'Copy Codex++ JSON config'}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">data_object</span>
+                      <span>{lang === 'zh' ? '复制 Codex++ 配置' : 'Copy Codex JSON'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleCopyCurl}
+                      className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+                      title={lang === 'zh' ? '复制终端 cURL 请求示例' : 'Copy cURL command'}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">terminal</span>
+                      <span>{lang === 'zh' ? 'cURL 示例' : 'cURL'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Configuration Grid: Base URL, Key, Protocol */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  {/* Base URL (5 cols) */}
+                  <div className="lg:col-span-5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-neutral-400 text-[16px]">link</span>
+                        Base URL
+                      </label>
+                      {/* Preset switch pills */}
+                      <div className="flex items-center gap-1 bg-neutral-900/90 p-0.5 rounded-lg border border-neutral-800 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBaseUrlPreset('cloud')}
+                          className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${selectedBaseUrlPreset === 'cloud' ? 'bg-blue-600 text-white' : 'text-neutral-400 hover:text-white'}`}
+                        >
+                          云端生产
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBaseUrlPreset('local')}
+                          className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${selectedBaseUrlPreset === 'local' ? 'bg-blue-600 text-white' : 'text-neutral-400 hover:text-white'}`}
+                        >
+                          本地调试
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedBaseUrlPreset('current')}
+                          className={`px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${selectedBaseUrlPreset === 'current' ? 'bg-blue-600 text-white' : 'text-neutral-400 hover:text-white'}`}
+                        >
+                          当前服务
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        value={resolvedBaseUrl}
+                        readOnly={selectedBaseUrlPreset !== 'custom'}
+                        onChange={(e) => {
+                          setSelectedBaseUrlPreset('custom')
+                          setCustomBaseUrl(e.target.value)
+                        }}
+                        className="w-full h-11 bg-[#101114] border border-neutral-700/80 rounded-xl px-3.5 pr-24 text-sm font-mono text-neutral-200 outline-none focus:border-blue-500 transition-colors select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCopyBaseUrl}
+                        className="absolute right-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                        <span>{lang === 'zh' ? '复制' : 'Copy'}</span>
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-neutral-400 font-mono flex items-center gap-1">
+                      <span className="text-neutral-500">端点:</span>
+                      <span className="text-blue-400 select-all">{resolvedBaseUrl}/chat/completions</span>
+                    </div>
+                  </div>
+
+                  {/* Key (4 cols) */}
+                  <div className="lg:col-span-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-neutral-400 text-[16px]">key</span>
+                        Key
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowCodexApiKey(!showCodexApiKey)}
+                        className="text-[11px] text-neutral-400 hover:text-neutral-200 flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">{showCodexApiKey ? 'visibility_off' : 'visibility'}</span>
+                        <span>{showCodexApiKey ? (lang === 'zh' ? '隐藏' : 'Hide') : (lang === 'zh' ? '显示' : 'Show')}</span>
+                      </button>
+                    </div>
+
+                    <div className="relative flex items-center">
+                      {apiConfig.allowed_keys.length > 1 ? (
+                        <select
+                          value={effectiveCodexKey}
+                          onChange={(e) => setSelectedApiKeyForCodex(e.target.value)}
+                          className="w-full h-11 bg-[#101114] border border-neutral-700/80 rounded-xl px-3.5 pr-20 text-xs font-mono text-neutral-200 outline-none focus:border-blue-500 transition-colors"
+                        >
+                          {apiConfig.allowed_keys.map((k) => {
+                            const d = apiConfig.allowed_keys_detail?.find(item => item.api_key === k)
+                            const label = d?.name ? `${d.name} (${k.substring(0, 10)}...)` : `${k.substring(0, 16)}...`
+                            return <option key={k} value={k} className="bg-[#15171c] text-white">{label}</option>
+                          })}
+                        </select>
+                      ) : (
+                        <input
+                          type={showCodexApiKey ? 'text' : 'password'}
+                          value={effectiveCodexKey}
+                          readOnly
+                          className="w-full h-11 bg-[#101114] border border-neutral-700/80 rounded-xl px-3.5 pr-20 text-sm font-mono text-neutral-200 outline-none select-all"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleCopyCodexKey}
+                        className="absolute right-1.5 px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-white text-xs font-bold rounded-lg flex items-center gap-1 transition-colors shadow-sm cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                        <span>{lang === 'zh' ? '复制' : 'Copy'}</span>
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-neutral-400 flex items-center justify-between">
+                      <span>{apiConfig.auth_required ? (lang === 'zh' ? '🔒 鉴权已开启，请求需携带 Bearer Key' : '🔒 Auth Required') : (lang === 'zh' ? '⚡ 鉴权已关闭，也可匿名调用' : '⚡ Open Access')}</span>
+                    </div>
+                  </div>
+
+                  {/* Protocol & Identity (3 cols) */}
+                  <div className="lg:col-span-3 space-y-2">
+                    <label className="text-xs font-bold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-neutral-400 text-[16px]">sync_alt</span>
+                      {lang === 'zh' ? '上游协议 / 会话身份' : 'Protocol & Session'}
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-1.5 bg-neutral-900/90 p-1 rounded-xl border border-neutral-800">
+                      <button
+                        type="button"
+                        onClick={() => setUpstreamProtocol('responses')}
+                        className={`py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${upstreamProtocol === 'responses' ? 'bg-neutral-800 text-neutral-200 border border-neutral-700' : 'text-neutral-400 hover:text-neutral-200'}`}
+                      >
+                        Responses API
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUpstreamProtocol('chat')}
+                        className={`py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${upstreamProtocol === 'chat' ? 'bg-blue-600 text-white shadow-sm' : 'text-neutral-400 hover:text-neutral-200'}`}
+                      >
+                        Chat Completions
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#101114] border border-neutral-800 text-xs">
+                      <span className="text-neutral-400">Codex 会话身份</span>
+                      <span className="text-blue-400 font-bold">Custom (默认)</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub2API & Guidance Tip */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 bg-neutral-900/70 border border-neutral-800 rounded-xl text-xs text-neutral-400">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-neutral-500 text-[18px]">info</span>
+                    <span>
+                      {lang === 'zh'
+                        ? '在 Codex++ 中设置时：会话身份选「Custom (默认)」；协议选「Chat Completions」；非 Sub2API 格式。'
+                        : 'In Codex++: Session Identity: Custom (Default); Protocol: Chat Completions; Non-Sub2API.'}
+                    </span>
+                  </div>
+                  {/* Account Targeting Quick Injector */}
+                  {accountsConfig.accounts.length > 0 && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-neutral-400 text-[11px]">{lang === 'zh' ? '靶向账号:' : 'Target:'}</span>
+                      <select
+                        value={targetAccountForModel}
+                        onChange={(e) => {
+                          setTargetAccountForModel(e.target.value)
+                          if (e.target.value) {
+                            handleAddTargetAccountModel(e.target.value)
+                            setTargetAccountForModel('')
+                          }
+                        }}
+                        className="bg-neutral-800 border border-neutral-700 text-white text-xs rounded-lg px-2 py-1 outline-none cursor-pointer"
+                      >
+                        <option value="">{lang === 'zh' ? '+ 生成账号专属模型...' : '+ Target Account Model...'}</option>
+                        {accountsConfig.accounts.map(acc => (
+                          <option key={acc.uid} value={acc.name}>
+                            {acc.name} ({acc.plan || (acc.is_enterprise ? 'Teams' : 'Personal')})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* MODEL LIST TABLE (CODEX++ STYLE) */}
+                <div className="space-y-4 pt-2">
+                  {/* Table Toolbar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-white text-base">{lang === 'zh' ? '模型列表' : 'Model List'}</h4>
+                        <span className="text-xs bg-neutral-800 text-neutral-300 px-2 py-0.5 rounded-full font-mono">
+                          {codexModels.length}
+                        </span>
+                      </div>
+                      <p className="text-neutral-400 text-xs mt-0.5">
+                        {lang === 'zh'
+                          ? '每行一个模型；上下文窗口可填 1M、200K 或 1000000，留空表示使用 Codex 默认长度。'
+                          : 'One model per line; context window supports 1M, 200K, or 1000000.'}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Add custom model input */}
+                      <div className="flex items-center gap-1.5 bg-[#101114] border border-neutral-700/80 rounded-xl px-2.5 py-1">
+                        <input
+                          type="text"
+                          value={newModelNameInput}
+                          onChange={(e) => setNewModelNameInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddCodexModel() }}
+                          placeholder={lang === 'zh' ? '输入模型名 (如 kimi-k3)...' : 'Model ID...'}
+                          className="bg-transparent text-xs text-white placeholder-neutral-500 outline-none w-36 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddCodexModel}
+                          disabled={!newModelNameInput.trim()}
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded text-[11px] font-bold transition-colors cursor-pointer"
+                        >
+                          {lang === 'zh' ? '+ 添加' : '+ Add'}
+                        </button>
+                      </div>
+
+                      {/* Fetch from upstream */}
+                      <button
+                        type="button"
+                        onClick={handleFetchUpstreamModels}
+                        disabled={fetchingUpstreamModels}
+                        className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title={lang === 'zh' ? '调用网关 /v1/models 获取最新支持的模型列表' : 'Fetch models from /v1/models'}
+                      >
+                        <span className={`material-symbols-outlined text-[16px] ${fetchingUpstreamModels ? 'animate-spin' : ''}`}>
+                          {fetchingUpstreamModels ? 'refresh' : 'download'}
+                        </span>
+                        <span>{lang === 'zh' ? '从上游获取' : 'Fetch Upstream'}</span>
+                      </button>
+
+                      {/* Reset defaults */}
+                      <button
+                        type="button"
+                        onClick={handleResetCodexModels}
+                        className="px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-neutral-200 border border-neutral-700 rounded-xl text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                        title={lang === 'zh' ? '重置为官方推荐模型列表' : 'Reset to defaults'}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">restart_alt</span>
+                        <span>{lang === 'zh' ? '恢复默认' : 'Reset'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* The Codex++ Grid / Table */}
+                  <div className="bg-[#101114] border border-neutral-800/90 rounded-xl overflow-hidden shadow-inner">
+                    <div className="overflow-x-auto max-h-[480px]">
+                      <table className="w-full text-left">
+                        <thead className="bg-[#16171c] border-b border-neutral-800 text-[11px] font-semibold text-neutral-400 uppercase tracking-wider sticky top-0 z-10">
+                          <tr>
+                            <th className="px-5 py-3.5">{lang === 'zh' ? '模型名称' : 'Model Name'}</th>
+                            <th className="px-4 py-3.5 w-32">{lang === 'zh' ? '上下文窗口' : 'Context Window'}</th>
+                            <th className="px-4 py-3.5 w-28">{lang === 'zh' ? '自动压缩' : 'Auto Compress'}</th>
+                            <th className="px-4 py-3.5 w-44">{lang === 'zh' ? '图片处理方式' : 'Vision / Image'}</th>
+                            <th className="px-5 py-3.5 text-right w-28">{lang === 'zh' ? '模型配置' : 'Actions'}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-800/60 font-mono text-xs">
+                          {codexModels.map((item) => {
+                            const vendor = getModelVendorInfo(item.id)
+                            return (
+                              <tr key={item.id} className="hover:bg-neutral-900/60 transition-colors group">
+                                {/* Model Name */}
+                                <td className="px-5 py-3.5 font-sans">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={item.id}
+                                      onChange={(e) => handleUpdateCodexModelItem(item.id, 'id', e.target.value)}
+                                      className="bg-[#18191d] border border-neutral-700/80 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:border-blue-500 outline-none w-64 select-all"
+                                    />
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-sans font-medium ${vendor.badge}`}>
+                                      {vendor.vendor}
+                                    </span>
+                                    {item.recommended && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-sans font-bold">
+                                        🔥 推荐
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Context Window */}
+                                <td className="px-4 py-3.5">
+                                  <input
+                                    type="text"
+                                    value={item.contextWindow}
+                                    onChange={(e) => handleUpdateCodexModelItem(item.id, 'contextWindow', e.target.value)}
+                                    placeholder="1M"
+                                    className="w-full bg-[#18191d] border border-neutral-700/80 rounded-lg px-3 py-1.5 text-xs font-mono text-neutral-200 focus:border-blue-500 outline-none"
+                                  />
+                                </td>
+
+                                {/* Auto Compress */}
+                                <td className="px-4 py-3.5">
+                                  <input
+                                    type="text"
+                                    value={item.autoCompress}
+                                    onChange={(e) => handleUpdateCodexModelItem(item.id, 'autoCompress', e.target.value)}
+                                    placeholder="90%"
+                                    className="w-full bg-[#18191d] border border-neutral-700/80 rounded-lg px-3 py-1.5 text-xs font-mono text-neutral-200 focus:border-blue-500 outline-none"
+                                  />
+                                </td>
+
+                                {/* Image Handling */}
+                                <td className="px-4 py-3.5 font-sans">
+                                  <select
+                                    value={item.imageMode}
+                                    onChange={(e) => handleUpdateCodexModelItem(item.id, 'imageMode', e.target.value)}
+                                    className="w-full bg-[#18191d] border border-neutral-700/80 rounded-lg px-2.5 py-1.5 text-xs text-neutral-200 focus:border-blue-500 outline-none font-sans cursor-pointer"
+                                  >
+                                    <option value="原样发送图片">原样发送图片</option>
+                                    <option value="Base64 编码">Base64 编码</option>
+                                    <option value="纯文本 (忽略图片)">纯文本 (忽略图片)</option>
+                                  </select>
+                                </td>
+
+                                {/* Actions */}
+                                <td className="px-5 py-3.5 text-right font-sans">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(item.id)
+                                        pushToast('SUCCESS', lang === 'zh' ? '已复制模型名' : 'Copied Model', item.id)
+                                      }}
+                                      className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-neutral-800 transition-colors cursor-pointer"
+                                      title={lang === 'zh' ? '复制该模型名称' : 'Copy model ID'}
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveCodexModel(item.id)}
+                                      className="p-1.5 text-neutral-500 hover:text-red-400 rounded-lg hover:bg-neutral-800 transition-colors cursor-pointer"
+                                      title={lang === 'zh' ? '删除该模型' : 'Delete model'}
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">delete</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               </div>
