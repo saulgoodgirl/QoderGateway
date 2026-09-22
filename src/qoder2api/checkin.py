@@ -222,25 +222,36 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
     for r in rows:
         uid = r["uid"]
         name = r["name"]
-        plan = r["plan"] or "Teams"
-        
+        u_type = str(r["user_type"] or "")
+        plan = r["plan"] or ("Personal" if "personal" in u_type.lower() else "Teams")
+
         # 1. 尝试获取配额积分
         user_quota_info = None
         rem_credits = 0.0
         tot_credits = 0.0
+        used_credits = 0.0
         try:
             from .tokens import get_account_quota
             q_res = get_account_quota(uid)
             if q_res.get("ok"):
                 quota_raw = q_res.get("quota", {})
-                uq = quota_raw.get("userQuota", {})
-                org_pkg = quota_raw.get("orgResourcePackage", {})
-                rem_credits = float(uq.get("remaining", 0.0)) + float(org_pkg.get("remaining", 0.0))
-                tot_credits = float(uq.get("total", 0.0))
+                uq = quota_raw.get("userQuota") or {}
+                addon = quota_raw.get("addOnQuota") or {}
+                org_pkg = quota_raw.get("orgResourcePackage") or {}
+
+                # 汇总剩余算力：套餐内 + 资源包(加油包) + 组织资源包
+                rem_credits = float(uq.get("remaining", 0.0)) + float(addon.get("remaining", 0.0)) + float(org_pkg.get("remaining", 0.0))
+                used_credits = float(uq.get("used", 0.0)) + float(addon.get("used", 0.0)) + float(org_pkg.get("used", 0.0))
+
+                org_total = float(org_pkg.get("total", 0.0) or (org_pkg.get("cap", 0.0) if org_pkg.get("cap", -1) > 0 else org_pkg.get("remaining", 0.0)))
+                tot_credits = float(uq.get("total", 0.0)) + float(addon.get("total", 0.0)) + org_total
+                if tot_credits < rem_credits + used_credits:
+                    tot_credits = rem_credits + used_credits
+
                 user_quota_info = {
                     "remaining": rem_credits,
                     "total": tot_credits,
-                    "used": float(uq.get("used", 0.0)),
+                    "used": used_credits,
                 }
         except Exception:
             pass

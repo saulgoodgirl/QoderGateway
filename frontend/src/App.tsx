@@ -421,7 +421,7 @@ export default function App() {
   const [showBatchImport, setShowBatchImport] = useState(false)
   const [batchJson, setBatchJson] = useState('')
   const [refreshingTokens, setRefreshingTokens] = useState(false)
-  const [quotaList, setQuotaList] = useState<{ uid: string; name: string; quota: { userQuota: { total: number; used: number; remaining: number; percentage: number } } }[] | null>(null)
+  const [quotaList, setQuotaList] = useState<any[] | null>(null)
 
   const [logFilterAccount, setLogFilterAccount] = useState('all')
   const [logFilterStatus, setLogFilterStatus] = useState('all')
@@ -1209,16 +1209,24 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-hairline">
                         {quotaList.map((q, i) => {
-                          const uq = q.quota?.userQuota || {}
+                          const quotaData: any = q.quota || {}
+                          const uq = quotaData.userQuota || {}
+                          const addon = quotaData.addOnQuota || {}
+                          const org = quotaData.orgResourcePackage || {}
+                          const remaining = (uq.remaining || 0) + (addon.remaining || 0) + (org.remaining || 0)
+                          const used = (uq.used || 0) + (addon.used || 0) + (org.used || 0)
+                          const orgCap = org.cap && org.cap > 0 ? org.cap : (org.remaining || 0)
+                          const total = Math.max((uq.total || 0) + (addon.total || 0) + (org.total || orgCap), remaining + used)
+                          const pct = total > 0 ? used / total : 0
                           return (
                             <tr key={i} className="hover:bg-canvas-soft transition-colors">
                               <td className="px-6 py-4 font-semibold text-ink">{q.name || q.uid.slice(0, 12)}</td>
-                              <td className="px-6 py-4 font-mono text-xs text-body">{uq.total ?? '--'}</td>
-                              <td className="px-6 py-4 font-mono text-xs text-body">{uq.used ?? '--'}</td>
-                              <td className={`px-6 py-4 font-mono text-xs ${uq.percentage > 0.8 ? 'text-red-600 font-bold' : 'text-body'}`}>{uq.remaining ?? '--'}</td>
+                              <td className="px-6 py-4 font-mono text-xs text-body">{total > 0 ? total.toLocaleString() : '--'}</td>
+                              <td className="px-6 py-4 font-mono text-xs text-body">{used.toLocaleString()}</td>
+                              <td className={`px-6 py-4 font-mono text-xs ${pct > 0.8 ? 'text-red-600 font-bold' : 'text-body font-semibold'}`}>{remaining.toLocaleString()}</td>
                               <td className="px-6 py-4">
                                 <div className="w-24 h-1.5 bg-hairline-strong rounded-full overflow-hidden">
-                                  <div className={`h-full ${(uq.percentage || 0) > 0.8 ? 'bg-red-500' : 'bg-mint'}`} style={{ width: `${Math.min(100, (uq.percentage || 0) * 100)}%` }} />
+                                  <div className={`h-full ${pct > 0.8 ? 'bg-red-500' : 'bg-mint'}`} style={{ width: `${Math.min(100, Math.max(used > 0 ? 5 : 0, pct * 100))}%` }} />
                                 </div>
                               </td>
                             </tr>

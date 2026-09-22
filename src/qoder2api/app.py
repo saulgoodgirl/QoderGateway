@@ -506,9 +506,13 @@ async def chat_completions(payload: dict[str, Any], authorization: str | None = 
                     q = get_account_quota(current_uid)
                     if q.get("ok"):
                         quota = q["quota"]
-                        truly_exceeded = bool(quota.get("isQuotaExceeded")) or (quota.get("userQuota") or {}).get("remaining", 1) <= 0
+                        uq = quota.get("userQuota") or {}
+                        addon = quota.get("addOnQuota") or {}
+                        org_pkg = quota.get("orgResourcePackage") or {}
+                        total_remaining = float(uq.get("remaining", 0.0)) + float(addon.get("remaining", 0.0)) + float(org_pkg.get("remaining", 0.0))
+                        truly_exceeded = bool(quota.get("isQuotaExceeded")) or total_remaining <= 0
                         if not truly_exceeded:
-                            add_log(f"Quota check on {current_uid}: NOT exceeded (remaining={quota.get('userQuota', {}).get('remaining')}), not rotating.", "WARNING")
+                            add_log(f"Quota check on {current_uid}: NOT exceeded (remaining={total_remaining}), not rotating.", "WARNING")
                             raise HTTPException(status_code=502, detail=f"{exc}")
                         add_log(f"Quota confirmed exceeded for {current_uid}: {exc}. Rotating...", "WARNING")
                     else:

@@ -121,7 +121,26 @@ def get_account_quota(uid: str) -> dict[str, Any]:
         return {"ok": False, "uid": uid, "error": f"网络错误: {e}"}
     if r.status_code != 200:
         return {"ok": False, "uid": uid, "error": f"HTTP {r.status_code}: {r.text[:160]}"}
-    return {"ok": True, "uid": uid, "name": row["name"], "quota": r.json()}
+
+    q_data = r.json()
+    try:
+        uq = q_data.get("userQuota") or {}
+        addon = q_data.get("addOnQuota") or {}
+        org = q_data.get("orgResourcePackage") or {}
+        total_remaining = float(uq.get("remaining", 0.0)) + float(addon.get("remaining", 0.0)) + float(org.get("remaining", 0.0))
+        is_exceeded = 1 if (bool(q_data.get("isQuotaExceeded")) or total_remaining <= 0) else 0
+        u_type = str(row["user_type"] or "")
+        plan = "Personal" if "personal" in u_type.lower() else "Teams"
+        user_tag = "Resource Pack" if float(addon.get("remaining", 0.0)) > 0 and float(uq.get("remaining", 0.0)) <= 0 else plan
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE accounts SET quota = ?, is_quota_exceeded = ?, plan = ?, user_tag = ? WHERE uid = ?",
+                (int(total_remaining), is_exceeded, plan, user_tag, uid)
+            )
+    except Exception:
+        pass
+
+    return {"ok": True, "uid": uid, "name": row["name"], "quota": q_data}
 
 
 def get_all_accounts_quota() -> dict[str, Any]:
