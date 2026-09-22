@@ -9,13 +9,16 @@ import { gsap } from 'gsap'
 
 interface Account {
   uid: string; name: string; user_type: string; security_oauth_token: string
-  refresh_token: string; machine_id: string; enabled: boolean; last_status: string
+  refresh_token: string; machine_id: string; enabled: boolean; api_enabled?: boolean
+  api_mode?: 'all' | 'dedicated' | 'disabled'
+  last_status: string
   last_error: string | null; quota: number; is_quota_exceeded: boolean
   plan: string | null; user_tag: string | null; next_reset_at: number | null
 }
 interface AccountsConfig { accounts: Account[]; active_uid: string | null }
 interface UIStatus { ready: boolean; mode: string; username: string | null; uid: string | null; user_type: string | null; error: string | null; accounts_count: number }
-interface APIConfig { auth_required: boolean; allowed_keys: string[] }
+interface KeyDetail { api_key: string; name?: string; account_uid?: string }
+interface APIConfig { auth_required: boolean; allowed_keys: string[]; allowed_keys_detail?: KeyDetail[] }
 interface Message { role: 'user' | 'assistant'; content: string }
 type TabId = 'dashboard' | 'accounts' | 'checkin' | 'playground' | 'api-keys' | 'logs' | 'register'
 type AppTabId = TabId
@@ -93,7 +96,7 @@ const UI_TEXT = {
     dashboard: {
       serviceStatus: 'Service Status', allGatewaysActive: 'All gateways active', noActiveSession: 'No active session', accountPool: 'Account Pool', activeSessions: 'Active Qoder accounts', apiAuth: 'API Auth', openAccess: 'Open access', activeUser: 'Active User', systemBriefing: 'System Briefing', readyBrief: 'Gateway is running. {count} account(s) are available for routing.', notReadyBrief: 'No active session is available. Import an account or add a PAT first.', recentNotifications: 'Recent Notifications', authImportError: 'Auth Import Error', sessionActive: 'Session Active', credentialConfig: 'Credential Configuration', credentialDesc: 'Add a Qoder PAT or import the current local Qoder auth session.', patPlaceholder: 'Enter Qoder PAT...', addPat: 'Add PAT', saving: 'Saving...', autoImport: 'Auto Import',
     },
-    accounts: { desc: 'Manage Qoder accounts used by the gateway for request routing and failover.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add a PAT from Dashboard.', showing: 'Showing {count} account(s)' },
+    accounts: { desc: 'Manage Qoder accounts used by the gateway. Toggle "API Routing" to include/exclude accounts from external calls while keeping daily check-ins active.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add a PAT from Dashboard.', showing: 'Showing {count} account(s)' },
     checkin: {
       bannerTitle: 'Daily Rewards · 100 Credits Per Account',
       desc: 'Claim 100 free compute credits every day for each Qoder account. Background auto-worker runs daily at 00:05 (UTC+8) to claim automatically.',
@@ -166,7 +169,7 @@ const UI_TEXT = {
     dashboard: {
       serviceStatus: '服务状态', allGatewaysActive: '网关可用', noActiveSession: '没有可用账号', accountPool: '账号池', activeSessions: '可参与路由的 Qoder 账号', apiAuth: 'API 鉴权', openAccess: '未开启鉴权', activeUser: '当前账号', systemBriefing: '运行状态', readyBrief: '网关正在运行，当前有 {count} 个账号可用于请求路由。', notReadyBrief: '当前没有可用会话，请先导入账号或添加 PAT。', recentNotifications: '最近状态', authImportError: '本地登录导入失败', sessionActive: '账号已连接', credentialConfig: '凭据配置', credentialDesc: '添加 Qoder PAT，或导入本机已有的 Qoder 登录会话。', patPlaceholder: '输入 Qoder PAT...', addPat: '添加 PAT', saving: '保存中...', autoImport: '自动导入',
     },
-    accounts: { desc: '管理网关用于请求路由和失败切换的 Qoder 账号。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击导入账号，或在控制台添加 PAT。', showing: '共 {count} 个账号' },
+    accounts: { desc: '管理网关用于请求路由和失败切换的 Qoder 账号。可单独控制账号是否参与 API 调用调度（排除调用仍享每日自动签到与令牌保活）。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击导入账号，或在控制台添加 PAT。', showing: '共 {count} 个账号' },
     checkin: {
       bannerTitle: '每日签到福利 · 每个账号 +100 Credits',
       desc: '每个 Qoder 账号每天可免费领取 100 算力 Credits。网关后台守护线程将在每日 00:05（北京时间）自动执行签到补领，也可随时一键为全部账号领完。',
@@ -412,6 +415,9 @@ export default function App() {
   const [showThinking, setShowThinking] = useState(true)
 
   const [newKey, setNewKey] = useState('')
+  const [newKeyAccount, setNewKeyAccount] = useState('')
+  const [newKeyName, setNewKeyName] = useState('')
+  const [playgroundTargetAccount, setPlaygroundTargetAccount] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [patToken, setPatToken] = useState('')
   const [submittingPat, setSubmittingPat] = useState(false)
@@ -823,6 +829,31 @@ export default function App() {
     } catch (err: any) { pushToast('ERROR', msg.toggleFailed, err.message) }
   }
 
+  const handleSetApiMode = async (uid: string, mode: 'all' | 'dedicated' | 'disabled') => {
+    try {
+      const resp = await authedFetch('/ui/accounts/set-api-mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, api_mode: mode }),
+      })
+      if (!resp.ok) throw new Error('Update API mode failed')
+      const labels: Record<string, string> = {
+        all: lang === 'zh' ? '全部调用 (默认池)' : 'All Calls (Default Pool)',
+        dedicated: lang === 'zh' ? '专属单独调用 (仅定向)' : 'Dedicated (Solo Only)',
+        disabled: lang === 'zh' ? '排除调用 (仅签到保活)' : 'Excluded (Check-in Only)',
+      }
+      pushToast(
+        'SUCCESS',
+        lang === 'zh' ? 'API 调度模式已更新' : 'API Mode Updated',
+        lang === 'zh' ? `已设置为：${labels[mode]}` : `Set to: ${labels[mode]}`
+      )
+      fetchAccounts()
+      fetchStatus()
+    } catch (err: any) {
+      pushToast('ERROR', lang === 'zh' ? '操作失败' : 'Failed', err.message)
+    }
+  }
+
   const handleDeleteAccount = async (uid: string) => {
     if (!confirm('Delete this account from the database?')) return
     try {
@@ -856,14 +887,42 @@ export default function App() {
     const trimmed = newKey.trim()
     if (!trimmed) return
     if (apiConfig.allowed_keys.includes(trimmed)) { pushToast('ERROR', lang === 'zh' ? 'Key 已存在' : 'Duplicate Key', msg.duplicateKey); return }
-    handleSaveApiConfig({ ...apiConfig, allowed_keys: [...apiConfig.allowed_keys, trimmed] })
+    const newDetail: KeyDetail = {
+      api_key: trimmed,
+      name: newKeyName.trim() || (newKeyAccount ? (accountsConfig.accounts.find(a => a.uid === newKeyAccount)?.name || '专属 Key') : '通用 Key'),
+      account_uid: newKeyAccount.trim(),
+    }
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
+    const updatedDetails = [...currentDetails, newDetail]
+    handleSaveApiConfig({
+      ...apiConfig,
+      allowed_keys: [...apiConfig.allowed_keys, trimmed],
+      allowed_keys_detail: updatedDetails,
+    })
     pushToast('SUCCESS', lang === 'zh' ? 'Key 已添加' : 'Key Added', msg.keyAdded)
     setNewKey('')
+    setNewKeyName('')
+    setNewKeyAccount('')
   }
 
   const handleDeleteKey = (key: string) => {
-    handleSaveApiConfig({ ...apiConfig, allowed_keys: apiConfig.allowed_keys.filter(k => k !== key) })
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
+    handleSaveApiConfig({
+      ...apiConfig,
+      allowed_keys: apiConfig.allowed_keys.filter(k => k !== key),
+      allowed_keys_detail: currentDetails.filter(k => k.api_key !== key),
+    })
     pushToast('SUCCESS', lang === 'zh' ? 'Key 已删除' : 'Key Removed', msg.keyRemoved)
+  }
+
+  const handleUpdateKeyAccount = (key: string, targetUid: string) => {
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
+    const updated = currentDetails.map(item => item.api_key === key ? { ...item, account_uid: targetUid } : item)
+    handleSaveApiConfig({
+      ...apiConfig,
+      allowed_keys_detail: updated,
+    })
+    pushToast('SUCCESS', lang === 'zh' ? 'Key 绑定已更新' : 'Key Binding Updated', lang === 'zh' ? '已更新该 Key 的指定调用账号' : 'Updated key target account')
   }
 
   const handleCopyKey = (key: string) => {
@@ -887,7 +946,13 @@ export default function App() {
     setChatMessages(prev => [...prev, { role: 'assistant', content: '' }])
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (apiConfig.auth_required && apiConfig.allowed_keys.length > 0) headers['Authorization'] = `Bearer ${apiConfig.allowed_keys[0]}`
+    if (apiConfig.auth_required && apiConfig.allowed_keys.length > 0) {
+      const boundKey = apiConfig.allowed_keys_detail?.find(k => k.account_uid && accountsConfig.accounts.find(a => a.name === playgroundTargetAccount)?.uid === k.account_uid)?.api_key
+      headers['Authorization'] = `Bearer ${boundKey || apiConfig.allowed_keys[0]}`
+    }
+    if (playgroundTargetAccount) {
+      headers['X-Account'] = playgroundTargetAccount
+    }
 
     try {
       const response = await fetch('/v1/chat/completions', { method: 'POST', headers, body: JSON.stringify({ model, messages: [{ role: 'user', content: trimmed }], stream }) })
@@ -1246,12 +1311,59 @@ export default function App() {
                 </div>
               </section>
 
+              {/* API Routing & Solo Targeting Guide Banner */}
+              <div className="p-4 bg-canvas-soft/80 border border-hairline rounded-2xl flex items-start gap-3.5 shadow-xs">
+                <div className="w-8 h-8 rounded-xl bg-ink text-white flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="material-symbols-outlined text-[18px]">alt_route</span>
+                </div>
+                <div className="text-xs space-y-1 flex-1">
+                  <div className="font-bold text-ink text-sm flex items-center gap-2">
+                    <span>{lang === 'zh' ? '账号单独调用与调度规则' : 'API Solo Targeting & Routing Rules'}</span>
+                    <span className="text-[10px] px-2 py-0.5 bg-mint/30 text-ink font-mono rounded-full font-bold">新特性</span>
+                  </div>
+                  <div className="text-body leading-relaxed space-y-1">
+                    <div>
+                      <strong className="text-emerald-700 font-semibold">{lang === 'zh' ? '● 默认全通（未设置时）' : '● All Calls (Default)'}：</strong>
+                      {lang === 'zh'
+                        ? '不设置或设为「全部调用」的账号，所有通用 API 请求将自动在此池中轮询均衡负载。'
+                        : 'Accounts set to All Calls load-balance incoming general API requests.'}
+                    </div>
+                    <div>
+                      <strong className="text-amber-700 font-semibold">{lang === 'zh' ? '● 单独指定调用（客户端零改动）' : '● Targeted Solo Call'}：</strong>
+                      {lang === 'zh'
+                        ? '在 Cursor、ZCode、NextChat、CherryStudio 等工具中，直接把模型名写为 '
+                        : 'In IDEs or clients, specify model as '}
+                      <code className="bg-black/5 px-1.5 py-0.5 rounded font-mono text-ink font-semibold">kimi-k3@账号名</code>
+                      {lang === 'zh' ? '（例如 ' : ' (e.g. '}
+                      <code className="bg-black/5 px-1.5 py-0.5 rounded font-mono text-ink font-semibold">kimi-k3@风思黏</code>
+                      {lang === 'zh'
+                        ? '），网关将自动定向单独调用该账号！亦可通过专属 API Key 绑定或 Header: X-Account 触发。'
+                        : '), and the gateway directs the call to that account!'}
+                    </div>
+                    <div>
+                      <strong className="text-neutral-600 font-semibold">{lang === 'zh' ? '● 专属保护模式' : '● Dedicated Mode'}：</strong>
+                      {lang === 'zh'
+                        ? '珍贵个人算力账号可设为「专属单独调用」，常规请求绝不会随机消耗其算力，只在显式指定时响应。'
+                        : 'Set accounts to Dedicated to prevent general pool consumption; only called when specifically requested.'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <section className="glass-card rounded-2xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead className="bg-canvas-soft border-b border-hairline">
-                      <tr>{['Account', 'UID', 'Plan / Quota', 'Status', 'Reset', 'Enabled', 'Actions'].map((h, i) => (
-                        <th key={i} className={`px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider ${i === 5 ? 'text-center' : ''}`}>{h}</th>
+                      <tr>{[
+                        lang === 'zh' ? '账号名称' : 'Account',
+                        'UID',
+                        lang === 'zh' ? '类型 / 配额' : 'Plan / Quota',
+                        lang === 'zh' ? '状态' : 'Status',
+                        lang === 'zh' ? 'API 调度模式' : 'API Routing Mode',
+                        lang === 'zh' ? '账号总启用' : 'Enabled',
+                        lang === 'zh' ? '操作' : 'Actions',
+                      ].map((h, i) => (
+                        <th key={i} className={`px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider ${i === 4 || i === 5 ? 'text-center' : i === 6 ? 'text-right' : ''}`}>{h}</th>
                       ))}</tr>
                     </thead>
                     <tbody className="divide-y divide-hairline">
@@ -1261,9 +1373,35 @@ export default function App() {
                         .filter(acc => !searchAccounts || acc.name.toLowerCase().includes(searchAccounts.toLowerCase()) || acc.uid.includes(searchAccounts))
                         .map((acc) => {
                           const isActive = accountsConfig.active_uid === acc.uid
+                          const currentMode = acc.api_mode || (acc.api_enabled !== false ? 'all' : 'disabled')
                           return (
                             <tr key={acc.uid} className={`hover:bg-canvas-soft transition-colors group ${isActive ? 'bg-mint/5' : ''}`}>
-                              <td className="px-6 py-5 font-bold text-ink"><div className="flex items-center gap-2">{acc.name}{isActive && <span className="text-[9px] bg-mint/20 text-ink px-1.5 py-0.5 rounded font-extrabold uppercase">Active</span>}</div></td>
+                              <td className="px-6 py-5 font-bold text-ink">
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2">
+                                    <span>{acc.name}</span>
+                                    {isActive && <span className="text-[9px] bg-mint/20 text-ink px-1.5 py-0.5 rounded font-extrabold uppercase">Active</span>}
+                                    {currentMode === 'dedicated' && (
+                                      <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-bold">专属</span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const modelName = `kimi-k3@${acc.name}`
+                                        navigator.clipboard.writeText(modelName)
+                                        pushToast('INFO', lang === 'zh' ? '已复制定向模型名' : 'Copied Target Model', lang === 'zh' ? `在客户端输入 ${modelName} 即可单独调用该账号！` : `Use ${modelName} in clients to call this account!`)
+                                      }}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/5 hover:bg-black/10 text-ink font-mono text-[10px] transition-colors"
+                                      title={lang === 'zh' ? '点击复制定向模型名 (例如: kimi-k3@账号名)' : 'Click to copy targeted model name'}
+                                    >
+                                      <span className="material-symbols-outlined text-[12px]">content_copy</span>
+                                      <span>@{acc.name}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
                               <td className="px-6 py-5 font-mono text-xs text-body select-all">{acc.uid}</td>
                               <td className="px-6 py-5"><div className="flex flex-col"><span className="text-xs font-semibold text-ink">{acc.user_tag || acc.plan || 'Trial'}</span><span className="text-[10px] text-body font-mono">Quota: {acc.quota}</span></div></td>
                               <td className="px-6 py-5">
@@ -1271,15 +1409,56 @@ export default function App() {
                                 : acc.last_status === 'ok' ? <span className="px-3 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-mint/20 text-ink">Enabled</span>
                                 : <span className="px-3 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-red-100 text-red-700" title={acc.last_error || ''}>Error</span>}
                               </td>
-                              <td className="px-6 py-5 text-xs font-mono text-body">{acc.next_reset_at ? new Date(acc.next_reset_at).toLocaleDateString() : '--'}</td>
                               <td className="px-6 py-5 text-center">
-                                <button onClick={() => handleToggleAccount(acc.uid, !acc.enabled)} className={`w-11 h-6 rounded-full p-0.5 transition-colors relative ${acc.enabled ? 'bg-ink' : 'bg-hairline-strong'}`}>
+                                <div className="inline-flex flex-col items-center gap-1">
+                                  <select
+                                    value={currentMode}
+                                    onChange={(e) => handleSetApiMode(acc.uid, e.target.value as any)}
+                                    disabled={!acc.enabled}
+                                    className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer outline-none shadow-xs ${
+                                      !acc.enabled
+                                        ? 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-not-allowed'
+                                        : currentMode === 'dedicated'
+                                        ? 'bg-amber-50 text-amber-900 border-amber-300 hover:border-amber-400'
+                                        : currentMode === 'disabled'
+                                        ? 'bg-neutral-50 text-neutral-600 border-neutral-300 hover:border-neutral-400'
+                                        : 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:border-emerald-400'
+                                    }`}
+                                    title={lang === 'zh' ? '点击切换该账号的 API 调用调度模式' : 'Select API routing mode for this account'}
+                                  >
+                                    <option value="all">🟢 {lang === 'zh' ? '全部调用 (默认池)' : 'All Calls (Default Pool)'}</option>
+                                    <option value="dedicated">🟡 {lang === 'zh' ? '专属单独调用 (仅定向)' : 'Dedicated (Solo Only)'}</option>
+                                    <option value="disabled">⚪ {lang === 'zh' ? '排除调用 (仅签到保活)' : 'Excluded (Check-in Only)'}</option>
+                                  </select>
+                                  <span className="text-[10px] text-body opacity-60">
+                                    {currentMode === 'dedicated'
+                                      ? (lang === 'zh' ? '普通请求不消耗' : 'Protected')
+                                      : currentMode === 'disabled'
+                                      ? (lang === 'zh' ? '不响应请求' : 'Offline')
+                                      : (lang === 'zh' ? '默认全通' : 'Default')}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-6 py-5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAccount(acc.uid, !acc.enabled)}
+                                  title={acc.enabled ? (lang === 'zh' ? '点击禁用该账号' : 'Disable account') : (lang === 'zh' ? '点击启用该账号' : 'Enable account')}
+                                  className={`w-11 h-6 rounded-full p-0.5 transition-colors relative ${acc.enabled ? 'bg-ink' : 'bg-hairline-strong'}`}
+                                >
                                   <div className={`w-5 h-5 bg-white rounded-full transition-transform duration-200 ${acc.enabled ? 'translate-x-5' : 'translate-x-0'}`}></div>
                                 </button>
                               </td>
                               <td className="px-6 py-5 text-right">
                                 <div className="flex items-center justify-end gap-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <button onClick={() => handleSelectAccount(acc.uid)} disabled={isActive || !acc.enabled} className="text-body hover:text-ink disabled:opacity-30" title="Activate"><span className="material-symbols-outlined">play_circle</span></button>
+                                  <button
+                                    onClick={() => handleSelectAccount(acc.uid)}
+                                    disabled={isActive || !acc.enabled || currentMode === 'disabled'}
+                                    className="text-body hover:text-ink disabled:opacity-30"
+                                    title={currentMode === 'disabled' ? (lang === 'zh' ? '已排除 API 调用，无法设为主会话' : 'Excluded from API routing') : 'Activate'}
+                                  >
+                                    <span className="material-symbols-outlined">play_circle</span>
+                                  </button>
                                   <button onClick={() => handleDeleteAccount(acc.uid)} className="text-body hover:text-red-600" title="Delete"><span className="material-symbols-outlined">delete</span></button>
                                 </div>
                               </td>
@@ -1546,6 +1725,31 @@ export default function App() {
                   <CustomInput value={model} onChange={setModel} placeholder="e.g. lite, pro" />
                 </div>
                 <div className="space-y-3">
+                  <label className="font-bold text-ink flex items-center justify-between">
+                    <span>{lang === 'zh' ? '指定调用账号' : 'Target Account'}</span>
+                    <span className="text-[10px] text-body font-normal">{lang === 'zh' ? '单独测试' : 'Solo Test'}</span>
+                  </label>
+                  <select
+                    value={playgroundTargetAccount}
+                    onChange={(e) => setPlaygroundTargetAccount(e.target.value)}
+                    className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-hairline bg-white/70 text-ink outline-none cursor-pointer hover:border-ink transition-colors"
+                  >
+                    <option value="">{lang === 'zh' ? '🌐 默认 (公共池自动轮询)' : '🌐 Default (All Pool Accounts)'}</option>
+                    {accountsConfig.accounts
+                      .filter(a => a.enabled && a.api_mode !== 'disabled')
+                      .map(a => (
+                        <option key={a.uid} value={a.name}>
+                          {a.api_mode === 'dedicated' ? '🟡 [专属] ' : '🟢 '} {a.name} ({a.quota} credits)
+                        </option>
+                      ))}
+                  </select>
+                  <div className="text-[10px] text-body">
+                    {playgroundTargetAccount
+                      ? (lang === 'zh' ? `已锁定单独使用账号：${playgroundTargetAccount}` : `Using account: ${playgroundTargetAccount}`)
+                      : (lang === 'zh' ? '未指定账号，默认全账号轮询调度' : 'No account set, round-robins all')}
+                  </div>
+                </div>
+                <div className="space-y-3">
                   <CustomCheckbox checked={stream} onChange={setStream} label={t.playground.streamResponse} />
                 </div>
                 <div className="space-y-3 flex-1 flex flex-col">
@@ -1614,30 +1818,67 @@ export default function App() {
                   </div>
                 </div>
                 <div className="col-span-12 lg:col-span-8 glass-card rounded-2xl overflow-hidden flex flex-col shadow-sm">
-                  <div className="p-6 flex items-center justify-between border-b border-hairline">
-                    <span className="font-bold">{t.api.activeAccessKeys}</span>
-                    <div className="flex gap-2">
-                      <CustomInput value={newKey} onChange={setNewKey} placeholder={t.api.keyPlaceholder} className="!w-64 !py-2 !bg-canvas-soft !border-hairline" mono />
-                      <button onClick={handleAddKey} disabled={!newKey.trim()} className="bg-ink text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-neutral-800 transition-all disabled:opacity-50">{t.common.add}</button>
+                  <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-hairline">
+                    <div>
+                      <span className="font-bold text-ink">{t.api.activeAccessKeys}</span>
+                      <p className="text-[11px] text-body">{lang === 'zh' ? '可为单个 Key 绑定专属账号，或保持默认全账号轮询。' : 'Keys can be bound to a single account or load-balanced across all.'}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                      <CustomInput value={newKey} onChange={setNewKey} placeholder={t.api.keyPlaceholder} className="!w-48 !py-2 !bg-canvas-soft !border-hairline" mono />
+                      <select
+                        value={newKeyAccount}
+                        onChange={(e) => setNewKeyAccount(e.target.value)}
+                        className="text-xs font-semibold px-2.5 py-2 rounded-xl border border-hairline bg-canvas-soft text-ink outline-none cursor-pointer"
+                        title={lang === 'zh' ? '选择该 Key 绑定的目标账号' : 'Select target account for this key'}
+                      >
+                        <option value="">{lang === 'zh' ? '🌐 全部账号 (默认)' : '🌐 All Accounts'}</option>
+                        {accountsConfig.accounts.map(a => (
+                          <option key={a.uid} value={a.uid}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button onClick={handleAddKey} disabled={!newKey.trim()} className="bg-ink text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-neutral-800 transition-all disabled:opacity-50 shrink-0">{t.common.add}</button>
                     </div>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-left">
-                      <thead className="bg-canvas-soft/50 border-b border-hairline"><tr>{['Key String', 'Actions'].map(h => (<th key={h} className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-widest">{h}</th>))}</tr></thead>
+                      <thead className="bg-canvas-soft/50 border-b border-hairline">
+                        <tr>{[lang === 'zh' ? 'Key 密钥' : 'Key String', lang === 'zh' ? '定向绑定账号' : 'Bound Account', lang === 'zh' ? '操作' : 'Actions'].map((h, i) => (
+                          <th key={h} className={`px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-widest ${i === 2 ? 'text-right' : ''}`}>{h}</th>
+                        ))}</tr>
+                      </thead>
                       <tbody className="divide-y divide-hairline">
                         {apiConfig.allowed_keys.length === 0 ? (
-                          <tr><td colSpan={2} className="py-6 text-center text-xs text-body font-medium">{t.api.noKeys}</td></tr>
-                        ) : apiConfig.allowed_keys.map((key) => (
-                          <tr key={key} className="hover:bg-canvas-soft/30 transition-colors">
-                            <td className="px-6 py-5 font-mono text-xs tracking-wider text-body opacity-80 select-all break-all">{key}</td>
-                            <td className="px-6 py-5 text-right">
-                              <div className="flex justify-end gap-2">
-                                <button onClick={() => handleCopyKey(key)} className="p-1.5 text-body hover:text-ink" title="Copy"><span className="material-symbols-outlined text-[18px]">{copiedKey === key ? 'check_circle' : 'content_copy'}</span></button>
-                                <button onClick={() => handleDeleteKey(key)} className="p-1.5 text-red-400 hover:text-red-600" title="Delete"><span className="material-symbols-outlined text-[18px]">block</span></button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                          <tr><td colSpan={3} className="py-6 text-center text-xs text-body font-medium">{t.api.noKeys}</td></tr>
+                        ) : apiConfig.allowed_keys.map((key) => {
+                          const detail = apiConfig.allowed_keys_detail?.find(d => d.api_key === key)
+                          return (
+                            <tr key={key} className="hover:bg-canvas-soft/30 transition-colors">
+                              <td className="px-6 py-5 font-mono text-xs tracking-wider text-body opacity-80 select-all break-all">{key}</td>
+                              <td className="px-6 py-5">
+                                <select
+                                  value={detail?.account_uid || ''}
+                                  onChange={(e) => handleUpdateKeyAccount(key, e.target.value)}
+                                  className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-hairline bg-white text-ink outline-none cursor-pointer shadow-xs"
+                                >
+                                  <option value="">{lang === 'zh' ? '🌐 全部账号 (默认轮询)' : '🌐 All Accounts (Default)'}</option>
+                                  {accountsConfig.accounts.map(a => (
+                                    <option key={a.uid} value={a.uid}>
+                                      {a.name} ({a.quota} credits)
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-6 py-5 text-right">
+                                <div className="flex justify-end gap-2">
+                                  <button onClick={() => handleCopyKey(key)} className="p-1.5 text-body hover:text-ink" title="Copy"><span className="material-symbols-outlined text-[18px]">{copiedKey === key ? 'check_circle' : 'content_copy'}</span></button>
+                                  <button onClick={() => handleDeleteKey(key)} className="p-1.5 text-red-400 hover:text-red-600" title="Delete"><span className="material-symbols-outlined text-[18px]">block</span></button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>

@@ -88,7 +88,7 @@ async def verify_gateway(payload: dict[str, Any]) -> dict[str, Any]:
     raise HTTPException(status_code=401, detail="Invalid Gateway Token")
 
 
-async def get_session() -> SessionContext:
+async def get_session(target_account: str | None = None) -> SessionContext:
     global _local_auth_error
     data = db_load_accounts()
     if not data["accounts"]:
@@ -103,8 +103,8 @@ async def get_session() -> SessionContext:
                         """
                         INSERT OR REPLACE INTO accounts (
                             uid, name, user_type, security_oauth_token, refresh_token, machine_id,
-                            enabled, last_status, last_error, region
-                        ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', NULL, ?)
+                            enabled, api_enabled, api_mode, last_status, last_error, region
+                        ) VALUES (?, ?, ?, ?, ?, ?, 1, 1, 'all', 'ok', NULL, ?)
                         """,
                         (sess.identity.uid, sess.identity.name or "Environment PAT", sess.identity.user_type,
                          sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id, sess.identity.region)
@@ -127,7 +127,7 @@ async def get_session() -> SessionContext:
                 add_log(f"Auto-import of local session failed: {exc}", "WARNING")
 
     try:
-        return get_active_session()
+        return get_active_session(target_account=target_account)
     except Exception as exc:
         raise HTTPException(
             status_code=400,
@@ -248,6 +248,55 @@ async def toggle_account(payload: dict[str, Any], verify: None = Depends(check_g
             raise HTTPException(status_code=404, detail="Account not found")
     add_log(f"Account toggle enabled={enabled} for UID: {uid}")
     return {"status": "ok"}
+
+
+@app.post("/ui/accounts/set-api-mode")
+async def set_account_api_mode(payload: dict[str, Any], verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """设置账号的 API 调度模式:
+    - 'all': 全部调用（默认，参与公共池常规轮询与所有通用 API 调用）
+    - 'dedicated': 专属单独调用（普通请求不消耗，仅在请求显式指定该账号时才调用）
+    - 'disabled': 完全排除调用（不参与任何 API 响应，仅保留每日自动签到与令牌保活）
+    """
+    uid = payload.get("uid")
+    api_mode = str(payload.get("api_mode", "all")).strip().lower()
+    if not uid:
+        raise HTTPException(status_code=400, detail="uid is required")
+    if api_mode not in ("all", "dedicated", "disabled"):
+        raise HTTPException(status_code=400, detail="api_mode must be 'all', 'dedicated', or 'disabled'")
+    
+    api_val = 0 if api_mode == "disabled" else 1
+    rotated_to = None
+    with get_db() as conn:
+        res = conn.execute("UPDATE accounts SET api_mode = ?, api_enabled = ? WHERE uid = ?", (api_mode, api_val, uid))
+        if res.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Account not found")
+
+        # If current active account was changed to dedicated or disabled, rotate active_uid to an eligible 'all' account
+        active_setting = conn.execute("SELECT value FROM settings WHERE key = 'active_uid'").fetchone()
+        active_uid = active_setting[0] if active_setting else None
+        if active_uid == uid and api_mode != "all":
+            next_eligible = conn.execute(
+                "SELECT uid FROM accounts WHERE enabled = 1 AND COALESCE(api_mode, 'all') = 'all' LIMIT 1"
+            ).fetchone()
+            if next_eligible:
+                rotated_to = next_eligible[0]
+                conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('active_uid', ?)", (rotated_to,))
+
+    if rotated_to:
+        add_log(f"Active pool account was rotated to {rotated_to}")
+
+    add_log(f"Account API mode set to '{api_mode}' for UID: {uid}")
+    return {"status": "ok", "uid": uid, "api_mode": api_mode}
+
+
+@app.post("/ui/accounts/toggle-api")
+async def toggle_account_api(payload: dict[str, Any], verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    uid = payload.get("uid")
+    api_enabled = bool(payload.get("api_enabled", True))
+    if not uid:
+        raise HTTPException(status_code=400, detail="uid is required")
+    api_mode = "all" if api_enabled else "disabled"
+    return await set_account_api_mode({"uid": uid, "api_mode": api_mode}, verify=verify)
 
 
 @app.post("/ui/accounts/refresh-tokens")
@@ -449,31 +498,64 @@ async def list_models():
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(payload: dict[str, Any], authorization: str | None = Header(default=None)):
+async def chat_completions(
+    payload: dict[str, Any],
+    authorization: str | None = Header(default=None),
+    x_account: str | None = Header(default=None, alias="X-Account"),
+    x_account_uid: str | None = Header(default=None, alias="X-Account-UID"),
+):
     config = load_config()
+    incoming_key = None
+    bound_account = None
+    if authorization and authorization.startswith("Bearer "):
+        incoming_key = authorization[len("Bearer "):].strip()
+        with get_db() as conn:
+            k_row = conn.execute("SELECT account_uid FROM allowed_keys WHERE api_key = ?", (incoming_key,)).fetchone()
+            if k_row and k_row["account_uid"]:
+                bound_account = str(k_row["account_uid"]).strip()
+
     if config.get("auth_required", False):
         allowed_keys = config.get("allowed_keys", [])
-        incoming_key = None
-        if authorization and authorization.startswith("Bearer "):
-            incoming_key = authorization[len("Bearer "):].strip()
-        
         if not incoming_key or incoming_key not in allowed_keys:
             add_log("Access denied: Invalid or missing API Key in request header.", "WARNING")
             raise HTTPException(status_code=401, detail="Invalid or missing API Key")
 
-    model = payload.get("model", "lite")
+    raw_model = str(payload.get("model") or "lite")
+    model_target = None
+    if "@" in raw_model:
+        actual_model, acc_spec = raw_model.rsplit("@", 1)
+        acc_spec = acc_spec.strip()
+        if acc_spec.lower() not in ("all", "default", ""):
+            model_target = acc_spec
+        payload["model"] = actual_model.strip()
+        model = payload["model"]
+    else:
+        model = raw_model
+
+    header_target = (x_account_uid or x_account or "").strip() or None
+    target_account = bound_account or header_target or model_target or None
+
     stream = bool(payload.get("stream", False))
     messages_count = len(payload.get("messages", []))
-    add_log(f"Incoming completion request: model={model}, stream={stream}, messages={messages_count}")
     
     accounts_data = db_load_accounts()
-    enabled_count = sum(1 for acc in accounts_data["accounts"] if acc.get("enabled", True))
-    max_retries = max(1, enabled_count)
+    if target_account:
+        add_log(f"Incoming completion request (TARGETED -> '{target_account}'): model={model}, stream={stream}, messages={messages_count}")
+        max_retries = 1
+    else:
+        add_log(f"Incoming completion request (DEFAULT POOL): model={model}, stream={stream}, messages={messages_count}")
+        eligible_count = sum(1 for acc in accounts_data["accounts"] if acc.get("enabled", True) and acc.get("api_mode") == "all")
+        if eligible_count == 0:
+            raise HTTPException(
+                status_code=503,
+                detail="当前没有已开启【全部调用】的公共账号。请在账号池中将至少一个账号设为【全部调用】。"
+            )
+        max_retries = max(1, eligible_count)
     
     for attempt in range(max_retries):
         try:
-            sess = await get_session()
-            add_log(f"Request routing via account: {sess.identity.name} ({sess.identity.uid})")
+            sess = await get_session(target_account=target_account)
+            add_log(f"Request routing via account: {sess.identity.name} ({sess.identity.uid}) [Attempt {attempt+1}/{max_retries}]")
             if stream:
                 gen = stream_openai_response(payload, sess)
                 try:
@@ -500,6 +582,10 @@ async def chat_completions(payload: dict[str, Any], authorization: str | None = 
                 return resp
         except Exception as exc:
             current_uid = sess.identity.uid if 'sess' in locals() else "unknown"
+            if target_account:
+                add_log(f"Targeted request to '{target_account}' failed: {exc}", "ERROR")
+                raise HTTPException(status_code=502, detail=f"指定账号【{target_account}】调用失败: {exc}")
+
             if is_account_error(exc):
                 if is_quota_error(exc):
                     # quota 类错误：先发一次请求确认是否真正 exceeded，而不是直接跳过
@@ -522,7 +608,7 @@ async def chat_completions(payload: dict[str, Any], authorization: str | None = 
                 else:
                     add_log(f"Account-level error on {current_uid}: {exc}. Rotating to next account...", "WARNING")
                 try:
-                    rotate_next_account(current_uid, str(exc))
+                    rotate_next_account(current_uid, str(exc), target_account=None)
                 except Exception as e:
                     add_log(f"Failed to rotate account: {e}", "ERROR")
                     raise HTTPException(status_code=502, detail=f"Request failed and no other account is available. Error: {exc}")

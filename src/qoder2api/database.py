@@ -12,7 +12,7 @@ DB_PATH = Path(os.getenv("DB_PATH", str(Path.home() / ".qoder" / "qoder2api.db")
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -20,6 +20,7 @@ def get_db():
 def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with get_db() as conn:
+        conn.execute("PRAGMA journal_mode=WAL;")
         # Accounts Table
         conn.execute(
             """
@@ -31,6 +32,8 @@ def init_db():
                 refresh_token TEXT NOT NULL,
                 machine_id TEXT NOT NULL,
                 enabled INTEGER DEFAULT 1,
+                api_enabled INTEGER DEFAULT 1,
+                api_mode TEXT DEFAULT 'all',
                 last_status TEXT DEFAULT 'ok',
                 last_error TEXT,
                 quota INTEGER DEFAULT 0,
@@ -41,15 +44,43 @@ def init_db():
             )
             """
         )
+
+        # Migration: ensure api_mode, api_enabled, region columns exist
+        try:
+            cur = conn.execute("PRAGMA table_info(accounts)")
+            cols = [c["name"] for c in cur.fetchall()]
+            if "api_mode" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN api_mode TEXT DEFAULT 'all'")
+            if "api_enabled" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN api_enabled INTEGER DEFAULT 1")
+            if "region" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN region TEXT DEFAULT 'cn'")
+            # Sync api_mode with api_enabled for any accounts where api_enabled was set to 0
+            conn.execute("UPDATE accounts SET api_mode = 'disabled' WHERE api_enabled = 0 AND (api_mode IS NULL OR api_mode = 'all')")
+        except Exception:
+            pass
         
         # Allowed API Keys Table (for proxy routing auth)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS allowed_keys (
-                api_key TEXT PRIMARY KEY
+                api_key TEXT PRIMARY KEY,
+                name TEXT DEFAULT '',
+                account_uid TEXT DEFAULT ''
             )
             """
         )
+
+        # Migration: ensure name and account_uid exist on allowed_keys
+        try:
+            cur_keys = conn.execute("PRAGMA table_info(allowed_keys)")
+            k_cols = [c["name"] for c in cur_keys.fetchall()]
+            if "name" not in k_cols:
+                conn.execute("ALTER TABLE allowed_keys ADD COLUMN name TEXT DEFAULT ''")
+            if "account_uid" not in k_cols:
+                conn.execute("ALTER TABLE allowed_keys ADD COLUMN account_uid TEXT DEFAULT ''")
+        except Exception:
+            pass
         
         # Global Settings Table
         conn.execute(
