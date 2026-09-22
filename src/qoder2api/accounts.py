@@ -162,18 +162,65 @@ def batch_import_accounts(records: list[dict]) -> dict:
     return {"imported": imported, "skipped": skipped}
 
 
-def get_active_session(target_account: str | None = None) -> SessionContext:
+def get_active_session(target_account: str | list[str] | None = None) -> SessionContext:
     """Gets the session for the active account from database.
     
-    If target_account is specified, searches for matching account (by uid or name)
-    that is enabled and not disabled from API calls.
-    If target_account is None, defaults to general pool (api_mode = 'all').
+    - If target_account is a list of strings:
+      Targets that specific subset of accounts. If active_uid is in this subset, use it;
+      otherwise pick the first enabled non-disabled account in the subset.
+    - If target_account is a single string:
+      Searches for matching account (by uid or name).
+    - If target_account is None:
+      Defaults to general pool (api_mode = 'all').
     """
     account = None
     with get_db() as conn:
-        if target_account:
-            target_str = str(target_account).strip()
-            # 优先精确匹配 UID 或 名称，或者 UID 前缀匹配
+        if isinstance(target_account, list) and len(target_account) > 0:
+            clean_uids = [str(x).strip() for x in target_account if str(x).strip()]
+            if len(clean_uids) == 1:
+                target_str = clean_uids[0]
+                res = conn.execute(
+                    """
+                    SELECT * FROM accounts 
+                    WHERE enabled = 1 
+                      AND COALESCE(api_mode, 'all') != 'disabled'
+                      AND (uid = ? OR name = ? OR uid LIKE ?)
+                    LIMIT 1
+                    """,
+                    (target_str, target_str, f"{target_str}%")
+                ).fetchone()
+                if res:
+                    account = dict(res)
+                else:
+                    raise ValueError(f"指定的 Qoder 账号【{target_str}】未找到、未启用或已设为禁止 API 调用。")
+            elif len(clean_uids) > 1:
+                placeholders = ",".join("?" for _ in clean_uids)
+                active_uid = db_get_settings("active_uid")
+                if active_uid and active_uid in clean_uids:
+                    res = conn.execute(
+                        "SELECT * FROM accounts WHERE uid = ? AND enabled = 1 AND COALESCE(api_mode, 'all') != 'disabled'",
+                        (active_uid,)
+                    ).fetchone()
+                    if res:
+                        account = dict(res)
+                if not account:
+                    res = conn.execute(
+                        f"""
+                        SELECT * FROM accounts 
+                        WHERE enabled = 1 
+                          AND COALESCE(api_mode, 'all') != 'disabled'
+                          AND (uid IN ({placeholders}) OR name IN ({placeholders}))
+                        LIMIT 1
+                        """,
+                        (*clean_uids, *clean_uids)
+                    ).fetchone()
+                    if res:
+                        account = dict(res)
+                        db_set_settings("active_uid", account["uid"])
+                if not account:
+                    raise ValueError(f"所选的 {len(clean_uids)} 个指定账号中无可用账号（未找到、未启用或已禁用）。")
+        elif isinstance(target_account, str) and target_account.strip():
+            target_str = target_account.strip()
             res = conn.execute(
                 """
                 SELECT * FROM accounts 
@@ -233,9 +280,11 @@ def get_active_session(target_account: str | None = None) -> SessionContext:
     )
 
 
-def rotate_next_account(failed_uid: str, error_msg: str, target_account: str | None = None) -> SessionContext:
+def rotate_next_account(failed_uid: str, error_msg: str, target_account: str | list[str] | None = None) -> SessionContext:
     """Marks failed account in database, rotates to the next enabled, and returns it.
-    If target_account was explicitly specified, does not rotate to avoid misrouting.
+    - If target_account is a single string: does not rotate (raises error).
+    - If target_account is a list of strings: rotates ONLY within this selected subset!
+    - If target_account is None: rotates within all general pool accounts (api_mode = 'all').
     """
     with get_db() as conn:
         conn.execute(
@@ -243,15 +292,30 @@ def rotate_next_account(failed_uid: str, error_msg: str, target_account: str | N
             (error_msg, failed_uid)
         )
         
-        if target_account:
+        if isinstance(target_account, str) and target_account.strip():
             raise RuntimeError(f"单独指定的账号【{target_account}】调用失败: {error_msg}")
 
-        # Get all enabled accounts eligible for general pool API routing
-        rows = conn.execute("SELECT * FROM accounts WHERE enabled = 1 AND COALESCE(api_mode, 'all') = 'all'").fetchall()
+        if isinstance(target_account, list) and len(target_account) > 0:
+            clean_uids = [str(x).strip() for x in target_account if str(x).strip()]
+            if len(clean_uids) <= 1:
+                raise RuntimeError(f"指定账号调用失败: {error_msg}")
+            placeholders = ",".join("?" for _ in clean_uids)
+            rows = conn.execute(
+                f"""
+                SELECT * FROM accounts 
+                WHERE enabled = 1 
+                  AND COALESCE(api_mode, 'all') != 'disabled'
+                  AND (uid IN ({placeholders}) OR name IN ({placeholders}))
+                """,
+                (*clean_uids, *clean_uids)
+            ).fetchall()
+        else:
+            # Get all enabled accounts eligible for general pool API routing
+            rows = conn.execute("SELECT * FROM accounts WHERE enabled = 1 AND COALESCE(api_mode, 'all') = 'all'").fetchall()
         
     enabled_accounts = [dict(r) for r in rows]
     if not enabled_accounts:
-        raise ValueError("All API-eligible accounts in the general pool have failed or none exist.")
+        raise ValueError("候选账号均已失败或无可用账号。")
 
     # Find next cyclic account
     next_acc = None

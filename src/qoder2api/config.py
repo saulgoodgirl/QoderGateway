@@ -4,6 +4,22 @@ from .database import get_db
 from .env import admin_password
 
 
+def parse_account_uids(raw: Any) -> list[str]:
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    raw_str = str(raw).strip()
+    if raw_str.startswith("[") and raw_str.endswith("]"):
+        try:
+            import json
+            items = json.loads(raw_str)
+            return [str(x).strip() for x in items if str(x).strip()]
+        except Exception:
+            pass
+    return [x.strip() for x in raw_str.split(",") if x.strip()]
+
+
 def load_config() -> dict[str, Any]:
     with get_db() as conn:
         res = conn.execute("SELECT value FROM settings WHERE key = 'auth_required'").fetchone()
@@ -12,7 +28,12 @@ def load_config() -> dict[str, Any]:
         rows = conn.execute("SELECT api_key, COALESCE(name, '') as name, COALESCE(account_uid, '') as account_uid FROM allowed_keys").fetchall()
         allowed_keys = [r["api_key"] for r in rows]
         allowed_keys_detail = [
-            {"api_key": r["api_key"], "name": r["name"], "account_uid": r["account_uid"]}
+            {
+                "api_key": r["api_key"],
+                "name": r["name"],
+                "account_uid": r["account_uid"],
+                "account_uids": parse_account_uids(r["account_uid"]),
+            }
             for r in rows
         ]
         
@@ -47,7 +68,11 @@ def save_config(config: dict[str, Any]) -> None:
                 if isinstance(item, dict):
                     k = str(item.get("api_key") or "").strip()
                     name = str(item.get("name") or "").strip()
-                    acc_uid = str(item.get("account_uid") or "").strip()
+                    acc_uids = item.get("account_uids")
+                    if isinstance(acc_uids, list):
+                        acc_uid = ",".join(str(x).strip() for x in acc_uids if str(x).strip())
+                    else:
+                        acc_uid = str(item.get("account_uid") or "").strip()
                     if k:
                         conn.execute(
                             "INSERT OR REPLACE INTO allowed_keys (api_key, name, account_uid) VALUES (?, ?, ?)",

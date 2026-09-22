@@ -505,14 +505,15 @@ async def chat_completions(
     x_account_uid: str | None = Header(default=None, alias="X-Account-UID"),
 ):
     config = load_config()
+    from .config import parse_account_uids
     incoming_key = None
-    bound_account = None
+    bound_accounts: list[str] = []
     if authorization and authorization.startswith("Bearer "):
         incoming_key = authorization[len("Bearer "):].strip()
         with get_db() as conn:
             k_row = conn.execute("SELECT account_uid FROM allowed_keys WHERE api_key = ?", (incoming_key,)).fetchone()
             if k_row and k_row["account_uid"]:
-                bound_account = str(k_row["account_uid"]).strip()
+                bound_accounts = parse_account_uids(k_row["account_uid"])
 
     if config.get("auth_required", False):
         allowed_keys = config.get("allowed_keys", [])
@@ -535,13 +536,27 @@ async def chat_completions(
     import urllib.parse
     raw_header_target = (x_account_uid or x_account or "").strip() or None
     header_target = urllib.parse.unquote(raw_header_target) if raw_header_target else None
-    target_account = bound_account or header_target or model_target or None
+
+    # Priority: model suffix > header target > key bound accounts (single or list)
+    if model_target:
+        target_account: str | list[str] | None = model_target
+    elif header_target:
+        target_account = header_target
+    elif len(bound_accounts) == 1:
+        target_account = bound_accounts[0]
+    elif len(bound_accounts) > 1:
+        target_account = bound_accounts
+    else:
+        target_account = None
 
     stream = bool(payload.get("stream", False))
     messages_count = len(payload.get("messages", []))
     
     accounts_data = db_load_accounts()
-    if target_account:
+    if isinstance(target_account, list):
+        add_log(f"Incoming completion request (SUBSET POOL of {len(target_account)} accounts): model={model}, stream={stream}, messages={messages_count}")
+        max_retries = max(1, len(target_account))
+    elif isinstance(target_account, str):
         add_log(f"Incoming completion request (TARGETED -> '{target_account}'): model={model}, stream={stream}, messages={messages_count}")
         max_retries = 1
     else:
@@ -584,7 +599,7 @@ async def chat_completions(
                 return resp
         except Exception as exc:
             current_uid = sess.identity.uid if 'sess' in locals() else "unknown"
-            if target_account:
+            if isinstance(target_account, str):
                 add_log(f"Targeted request to '{target_account}' failed: {exc}", "ERROR")
                 raise HTTPException(status_code=502, detail=f"指定账号【{target_account}】调用失败: {exc}")
 

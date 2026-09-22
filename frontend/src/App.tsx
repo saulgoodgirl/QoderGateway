@@ -17,7 +17,7 @@ interface Account {
 }
 interface AccountsConfig { accounts: Account[]; active_uid: string | null }
 interface UIStatus { ready: boolean; mode: string; username: string | null; uid: string | null; user_type: string | null; error: string | null; accounts_count: number }
-interface KeyDetail { api_key: string; name?: string; account_uid?: string }
+interface KeyDetail { api_key: string; name?: string; account_uid?: string; account_uids?: string[] }
 interface APIConfig { auth_required: boolean; allowed_keys: string[]; allowed_keys_detail?: KeyDetail[] }
 interface Message { role: 'user' | 'assistant'; content: string }
 type TabId = 'dashboard' | 'accounts' | 'checkin' | 'playground' | 'api-keys' | 'logs' | 'register'
@@ -302,6 +302,200 @@ function CustomSelect({ value, onChange, options, placeholder }: { value: string
   )
 }
 
+function MultiAccountSelect({
+  selectedUids,
+  onChange,
+  accounts,
+  placeholder = '🌐 全部账号 (默认轮询)',
+  lang = 'zh',
+}: {
+  selectedUids: string[]
+  onChange: (uids: string[]) => void
+  accounts: Account[]
+  placeholder?: string
+  lang?: Lang
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const toggleAccount = (uid: string) => {
+    if (selectedUids.includes(uid)) {
+      onChange(selectedUids.filter(u => u !== uid))
+    } else {
+      onChange([...selectedUids, uid])
+    }
+  }
+
+  const selectAll = () => {
+    onChange(accounts.map(a => a.uid))
+  }
+
+  const clearAll = () => {
+    onChange([])
+  }
+
+  const selectedAccounts = accounts.filter(a => selectedUids.includes(a.uid))
+
+  return (
+    <div ref={ref} className={`relative ${open ? 'z-[5000]' : 'z-10'}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="min-w-[190px] max-w-[280px] h-9 bg-white border border-hairline hover:border-ink/40 rounded-xl px-3 text-xs text-ink font-semibold flex items-center justify-between gap-2 shadow-xs transition-all cursor-pointer select-none"
+      >
+        <div className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
+          {selectedAccounts.length === 0 ? (
+            <span className="text-body/70 flex items-center gap-1">
+              <span>🌐</span>
+              <span className="truncate">{placeholder}</span>
+            </span>
+          ) : selectedAccounts.length === 1 ? (
+            <span className="flex items-center gap-1.5 text-ink font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+              <span className="truncate">{selectedAccounts[0].name}</span>
+              <span className="text-[10px] text-body font-mono bg-canvas-soft px-1 rounded shrink-0">
+                {selectedAccounts[0].quota}c
+              </span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-ink font-bold">
+              <span className="px-1.5 py-0.2 rounded-full bg-ink text-white text-[10px] font-mono shrink-0">
+                {selectedAccounts.length}
+              </span>
+              <span className="truncate text-body text-[11px]">
+                {selectedAccounts.map(a => a.name).join(', ')}
+              </span>
+            </span>
+          )}
+        </div>
+        <span className={`material-symbols-outlined text-body text-[16px] transition-transform duration-200 shrink-0 ${open ? 'rotate-180' : ''}`}>
+          expand_more
+        </span>
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 w-72 bg-white border border-hairline rounded-2xl shadow-2xl p-2.5 z-[6000] text-xs animate-in fade-in zoom-in-95 duration-100">
+          <div className="flex items-center justify-between px-2 py-1.5 mb-1.5 border-b border-hairline text-[11px] text-body">
+            <span className="font-semibold text-ink">
+              {lang === 'zh' ? '选择定向账号' : 'Select Target Accounts'}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={selectAll}
+                className="text-primary hover:underline cursor-pointer font-medium"
+              >
+                {lang === 'zh' ? '全选' : 'Select All'}
+              </button>
+              <span className="text-hairline">|</span>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-body hover:text-ink cursor-pointer font-medium"
+              >
+                {lang === 'zh' ? '清空 (轮询)' : 'Clear (All)'}
+              </button>
+            </div>
+          </div>
+
+          <div
+            onClick={clearAll}
+            className={`flex items-center gap-2 px-2.5 py-2 rounded-xl cursor-pointer transition-colors ${
+              selectedUids.length === 0
+                ? 'bg-ink text-white font-semibold'
+                : 'hover:bg-canvas-soft text-ink'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[16px]">
+              {selectedUids.length === 0 ? 'radio_button_checked' : 'radio_button_unchecked'}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs">{lang === 'zh' ? '全部账号 (默认智能轮询)' : 'All Accounts (Default Pool)'}</div>
+              <div className={`text-[10px] ${selectedUids.length === 0 ? 'text-white/70' : 'text-body'}`}>
+                {lang === 'zh' ? '不限制，请求将在所有可用账号间轮询' : 'Rotate across all eligible accounts'}
+              </div>
+            </div>
+          </div>
+
+          <div className="my-1.5 border-t border-hairline"></div>
+
+          <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
+            {accounts.length === 0 ? (
+              <div className="py-4 text-center text-body text-[11px]">
+                {lang === 'zh' ? '暂无可绑定的账号' : 'No accounts available'}
+              </div>
+            ) : (
+              accounts.map(acc => {
+                const isChecked = selectedUids.includes(acc.uid)
+                return (
+                  <div
+                    key={acc.uid}
+                    onClick={() => toggleAccount(acc.uid)}
+                    className={`flex items-center gap-2 px-2.5 py-2 rounded-xl cursor-pointer transition-colors ${
+                      isChecked
+                        ? 'bg-canvas-soft border border-hairline-strong/30 font-semibold'
+                        : 'hover:bg-canvas-soft/60 text-ink'
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-[18px] transition-colors ${
+                        isChecked ? 'text-ink' : 'text-body/40'
+                      }`}
+                    >
+                      {isChecked ? 'check_box' : 'check_box_outline_blank'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="truncate text-xs font-bold text-ink">{acc.name}</span>
+                        {acc.plan && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-ink/5 text-ink/70 font-mono uppercase">
+                            {acc.plan}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-body mt-0.5">
+                        <span className={acc.quota <= 10 ? 'text-amber-600 font-bold' : ''}>
+                          {acc.quota} 额度
+                        </span>
+                        {acc.api_enabled === false && (
+                          <span className="text-red-500 font-medium">(API已关)</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          {selectedUids.length > 0 && (
+            <div className="mt-2 pt-1.5 border-t border-hairline px-2 flex items-center justify-between text-[11px] text-body">
+              <span>{lang === 'zh' ? `已绑定 ${selectedUids.length} 个账号` : `${selectedUids.length} accounts bound`}</span>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="px-2.5 py-1 bg-ink text-white rounded-lg font-bold text-[10px] hover:bg-neutral-800 transition-colors"
+              >
+                {lang === 'zh' ? '确定' : 'Done'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CustomInput({ value, onChange, placeholder, type = 'text', className = '', mono = false }: {
   value: string; onChange: (v: string) => void; placeholder?: string; type?: string; className?: string; mono?: boolean
 }) {
@@ -415,7 +609,7 @@ export default function App() {
   const [showThinking, setShowThinking] = useState(true)
 
   const [newKey, setNewKey] = useState('')
-  const [newKeyAccount, setNewKeyAccount] = useState('')
+  const [newKeyAccounts, setNewKeyAccounts] = useState<string[]>([])
   const [newKeyName, setNewKeyName] = useState('')
   const [playgroundTargetAccount, setPlaygroundTargetAccount] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
@@ -887,12 +1081,21 @@ export default function App() {
     const trimmed = newKey.trim()
     if (!trimmed) return
     if (apiConfig.allowed_keys.includes(trimmed)) { pushToast('ERROR', lang === 'zh' ? 'Key 已存在' : 'Duplicate Key', msg.duplicateKey); return }
+    
+    let defaultName = '通用 Key'
+    if (newKeyAccounts.length === 1) {
+      defaultName = accountsConfig.accounts.find(a => a.uid === newKeyAccounts[0])?.name || '专属 Key'
+    } else if (newKeyAccounts.length > 1) {
+      defaultName = `多账号 Key (${newKeyAccounts.length}个)`
+    }
+
     const newDetail: KeyDetail = {
       api_key: trimmed,
-      name: newKeyName.trim() || (newKeyAccount ? (accountsConfig.accounts.find(a => a.uid === newKeyAccount)?.name || '专属 Key') : '通用 Key'),
-      account_uid: newKeyAccount.trim(),
+      name: newKeyName.trim() || defaultName,
+      account_uid: newKeyAccounts.join(','),
+      account_uids: newKeyAccounts,
     }
-    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '', account_uids: [] }))
     const updatedDetails = [...currentDetails, newDetail]
     handleSaveApiConfig({
       ...apiConfig,
@@ -902,11 +1105,11 @@ export default function App() {
     pushToast('SUCCESS', lang === 'zh' ? 'Key 已添加' : 'Key Added', msg.keyAdded)
     setNewKey('')
     setNewKeyName('')
-    setNewKeyAccount('')
+    setNewKeyAccounts([])
   }
 
   const handleDeleteKey = (key: string) => {
-    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '', account_uids: [] }))
     handleSaveApiConfig({
       ...apiConfig,
       allowed_keys: apiConfig.allowed_keys.filter(k => k !== key),
@@ -915,14 +1118,29 @@ export default function App() {
     pushToast('SUCCESS', lang === 'zh' ? 'Key 已删除' : 'Key Removed', msg.keyRemoved)
   }
 
-  const handleUpdateKeyAccount = (key: string, targetUid: string) => {
-    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
-    const updated = currentDetails.map(item => item.api_key === key ? { ...item, account_uid: targetUid } : item)
+  const handleUpdateKeyAccounts = (key: string, targetUids: string[]) => {
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '', account_uids: [] }))
+    const updated = currentDetails.map(item => {
+      if (item.api_key === key) {
+        return {
+          ...item,
+          account_uid: targetUids.join(','),
+          account_uids: targetUids,
+        }
+      }
+      return item
+    })
     handleSaveApiConfig({
       ...apiConfig,
       allowed_keys_detail: updated,
     })
-    pushToast('SUCCESS', lang === 'zh' ? 'Key 绑定已更新' : 'Key Binding Updated', lang === 'zh' ? '已更新该 Key 的指定调用账号' : 'Updated key target account')
+    pushToast(
+      'SUCCESS',
+      lang === 'zh' ? 'Key 绑定已更新' : 'Key Binding Updated',
+      lang === 'zh'
+        ? (targetUids.length > 0 ? `已绑定 ${targetUids.length} 个账号` : '已设为全部账号轮询')
+        : (targetUids.length > 0 ? `Updated binding to ${targetUids.length} account(s)` : 'Set to all accounts pool')
+    )
   }
 
   const handleCopyKey = (key: string) => {
@@ -947,7 +1165,12 @@ export default function App() {
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (apiConfig.auth_required && apiConfig.allowed_keys.length > 0) {
-      const boundKey = apiConfig.allowed_keys_detail?.find(k => k.account_uid && accountsConfig.accounts.find(a => a.name === playgroundTargetAccount)?.uid === k.account_uid)?.api_key
+      const targetAcc = accountsConfig.accounts.find(a => a.name === playgroundTargetAccount)
+      const targetUid = targetAcc?.uid
+      const boundKey = apiConfig.allowed_keys_detail?.find(k => {
+        const uids = k.account_uids || (k.account_uid ? k.account_uid.split(',').map(s => s.trim()).filter(Boolean) : [])
+        return targetUid && uids.includes(targetUid)
+      })?.api_key
       headers['Authorization'] = `Bearer ${boundKey || apiConfig.allowed_keys[0]}`
     }
     if (playgroundTargetAccount) {
@@ -1821,30 +2044,28 @@ export default function App() {
                   <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-hairline">
                     <div>
                       <span className="font-bold text-ink">{t.api.activeAccessKeys}</span>
-                      <p className="text-[11px] text-body">{lang === 'zh' ? '可为单个 Key 绑定专属账号，或保持默认全账号轮询。' : 'Keys can be bound to a single account or load-balanced across all.'}</p>
+                      <p className="text-[11px] text-body">{lang === 'zh' ? '可为单个 Key 绑定多账号轮询，或保持默认全账号轮询。' : 'Keys can be bound to specific account subsets or load-balanced across all.'}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                      <CustomInput value={newKey} onChange={setNewKey} placeholder={t.api.keyPlaceholder} className="!w-48 !py-2 !bg-canvas-soft !border-hairline" mono />
-                      <select
-                        value={newKeyAccount}
-                        onChange={(e) => setNewKeyAccount(e.target.value)}
-                        className="text-xs font-semibold px-2.5 py-2 rounded-xl border border-hairline bg-canvas-soft text-ink outline-none cursor-pointer"
-                        title={lang === 'zh' ? '选择该 Key 绑定的目标账号' : 'Select target account for this key'}
-                      >
-                        <option value="">{lang === 'zh' ? '🌐 全部账号 (默认)' : '🌐 All Accounts'}</option>
-                        {accountsConfig.accounts.map(a => (
-                          <option key={a.uid} value={a.uid}>
-                            {a.name}
-                          </option>
-                        ))}
-                      </select>
+                      <CustomInput value={newKey} onChange={setNewKey} placeholder={t.api.keyPlaceholder} className="!w-44 !py-2 !bg-canvas-soft !border-hairline" mono />
+                      <button onClick={handleGenerateKey} className="px-2.5 py-2 text-xs font-semibold bg-canvas-soft border border-hairline rounded-xl hover:bg-hairline text-ink transition-all shrink-0" title={lang === 'zh' ? '随机生成 API Key' : 'Generate random key'}>
+                        {lang === 'zh' ? '🎲 生成' : '🎲 Gen'}
+                      </button>
+                      <CustomInput value={newKeyName} onChange={setNewKeyName} placeholder={lang === 'zh' ? '备注 (可选)' : 'Label (Optional)'} className="!w-28 !py-2 !bg-canvas-soft !border-hairline text-xs" />
+                      <MultiAccountSelect
+                        selectedUids={newKeyAccounts}
+                        onChange={setNewKeyAccounts}
+                        accounts={accountsConfig.accounts}
+                        placeholder={lang === 'zh' ? '全部账号 (默认)' : 'All Accounts'}
+                        lang={lang}
+                      />
                       <button onClick={handleAddKey} disabled={!newKey.trim()} className="bg-ink text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-neutral-800 transition-all disabled:opacity-50 shrink-0">{t.common.add}</button>
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto min-h-[380px]">
                     <table className="w-full text-left">
                       <thead className="bg-canvas-soft/50 border-b border-hairline">
-                        <tr>{[lang === 'zh' ? 'Key 密钥' : 'Key String', lang === 'zh' ? '定向绑定账号' : 'Bound Account', lang === 'zh' ? '操作' : 'Actions'].map((h, i) => (
+                        <tr>{[lang === 'zh' ? 'Key 密钥' : 'Key String', lang === 'zh' ? '定向绑定账号 (支持多选)' : 'Bound Accounts', lang === 'zh' ? '操作' : 'Actions'].map((h, i) => (
                           <th key={h} className={`px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-widest ${i === 2 ? 'text-right' : ''}`}>{h}</th>
                         ))}</tr>
                       </thead>
@@ -1853,22 +2074,23 @@ export default function App() {
                           <tr><td colSpan={3} className="py-6 text-center text-xs text-body font-medium">{t.api.noKeys}</td></tr>
                         ) : apiConfig.allowed_keys.map((key) => {
                           const detail = apiConfig.allowed_keys_detail?.find(d => d.api_key === key)
+                          const currentUids = detail?.account_uids || (detail?.account_uid ? detail.account_uid.split(',').map(s => s.trim()).filter(Boolean) : [])
                           return (
                             <tr key={key} className="hover:bg-canvas-soft/30 transition-colors">
-                              <td className="px-6 py-5 font-mono text-xs tracking-wider text-body opacity-80 select-all break-all">{key}</td>
+                              <td className="px-6 py-5 font-mono text-xs tracking-wider text-body opacity-80 select-all break-all">
+                                {detail?.name && (
+                                  <div className="font-bold text-ink text-xs font-sans mb-1">{detail.name}</div>
+                                )}
+                                <div className="font-mono text-[11px] text-body/90 select-all">{key}</div>
+                              </td>
                               <td className="px-6 py-5">
-                                <select
-                                  value={detail?.account_uid || ''}
-                                  onChange={(e) => handleUpdateKeyAccount(key, e.target.value)}
-                                  className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-hairline bg-white text-ink outline-none cursor-pointer shadow-xs"
-                                >
-                                  <option value="">{lang === 'zh' ? '🌐 全部账号 (默认轮询)' : '🌐 All Accounts (Default)'}</option>
-                                  {accountsConfig.accounts.map(a => (
-                                    <option key={a.uid} value={a.uid}>
-                                      {a.name} ({a.quota} credits)
-                                    </option>
-                                  ))}
-                                </select>
+                                <MultiAccountSelect
+                                  selectedUids={currentUids}
+                                  onChange={(uids) => handleUpdateKeyAccounts(key, uids)}
+                                  accounts={accountsConfig.accounts}
+                                  placeholder={lang === 'zh' ? '全部账号 (默认轮询)' : 'All Accounts (Default)'}
+                                  lang={lang}
+                                />
                               </td>
                               <td className="px-6 py-5 text-right">
                                 <div className="flex justify-end gap-2">
