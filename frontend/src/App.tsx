@@ -437,6 +437,12 @@ export default function App() {
   const [claimingCheckin, setClaimingCheckin] = useState(false)
   const [claimingUid, setClaimingUid] = useState<string | null>(null)
 
+  const [showAddAccountModal, setShowAddAccountModal] = useState(false)
+  const [addAccountTab, setAddAccountTab] = useState<'pat' | 'batch' | 'local'>('pat')
+  const [addAccountPat, setAddAccountPat] = useState('')
+  const [addAccountName, setAddAccountName] = useState('')
+  const [addingAccount, setAddingAccount] = useState(false)
+
   const switchLang = (next: Lang) => {
     setLang(next)
     localStorage.setItem('qodergate_lang', next)
@@ -544,7 +550,7 @@ export default function App() {
       const data = await resp.json()
       if (data.status === 'ok') {
         pushToast('SUCCESS', lang === 'zh' ? `导入 ${data.imported} 个账号` : `Imported ${data.imported}`, lang === 'zh' ? `跳过 ${data.skipped}` : `skipped ${data.skipped}`)
-        setBatchJson(''); setShowBatchImport(false); fetchAccounts()
+        setBatchJson(''); setShowBatchImport(false); setShowAddAccountModal(false); fetchAccounts()
       } else { pushToast('ERROR', lang === 'zh' ? '导入失败' : 'Import failed', data.detail || '') }
     } catch { pushToast('ERROR', lang === 'zh' ? '导入失败' : 'Import failed', '') }
   }, [authedFetch, batchJson, lang, fetchAccounts, pushToast])
@@ -767,6 +773,36 @@ export default function App() {
     } catch (err: any) {
       pushToast('ERROR', msg.patFailed, err.message)
     } finally { setSubmittingPat(false) }
+  }
+
+  const handleAddAccountPat = async () => {
+    const trimmed = addAccountPat.trim()
+    if (!trimmed) return
+    setAddingAccount(true)
+    try {
+      const resp = await authedFetch('/ui/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pat: trimmed, name: addAccountName.trim() || undefined }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json()
+        throw new Error(err.detail || 'PAT verification failed')
+      }
+      const data = await resp.json()
+      pushToast('SUCCESS', lang === 'zh' ? '账号已成功添加' : 'Account Added Successfully', msg.patAdded(data.name || 'PAT Account'))
+      setAddAccountPat('')
+      setAddAccountName('')
+      setShowAddAccountModal(false)
+      fetchAccounts()
+      fetchStatus()
+      fetchLogs()
+      fetchCheckinStatus()
+    } catch (err: any) {
+      pushToast('ERROR', msg.patFailed, err.message)
+    } finally {
+      setAddingAccount(false)
+    }
   }
 
   const handleSelectAccount = async (uid: string) => {
@@ -1134,8 +1170,8 @@ export default function App() {
                   <button onClick={handleRefreshStatus} className="flex items-center gap-2 px-4 py-2.5 text-body hover:text-ink transition-colors font-bold text-sm">
                     <span className="material-symbols-outlined text-[18px]">refresh</span>{t.accounts.refreshStatus}
                   </button>
-                  <button onClick={handleImportAuth} className="flex items-center gap-2 px-6 py-2.5 bg-ink text-white rounded-lg hover:bg-neutral-800 transition-all font-bold text-sm shadow-md">
-                    <span className="material-symbols-outlined text-[18px]">add</span>{t.accounts.importAccounts}
+                  <button onClick={() => setShowAddAccountModal(true)} className="flex items-center gap-2 px-6 py-2.5 bg-ink text-white rounded-lg hover:bg-neutral-800 transition-all font-bold text-sm shadow-md">
+                    <span className="material-symbols-outlined text-[18px]">add</span>{lang === 'zh' ? '添加账号' : 'Add Account'}
                   </button>
                 </div>
               </section>
@@ -1789,6 +1825,184 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* ─── ADD ACCOUNT MODAL ─── */}
+      {showAddAccountModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface-card border border-hairline rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-hairline">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-ink text-[22px]">person_add</span>
+                <h3 className="font-bold text-base text-ink">{lang === 'zh' ? '添加 Qoder 账号' : 'Add Qoder Account'}</h3>
+              </div>
+              <button
+                onClick={() => setShowAddAccountModal(false)}
+                className="text-body hover:text-ink transition-colors p-1 rounded-lg hover:bg-black/5"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div className="flex border-b border-hairline px-6 pt-3 gap-6 text-sm font-semibold">
+              <button
+                onClick={() => setAddAccountTab('pat')}
+                className={`pb-3 transition-colors border-b-2 ${addAccountTab === 'pat' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+              >
+                {lang === 'zh' ? 'PAT 令牌添加 (推荐)' : 'PAT Token (Recommended)'}
+              </button>
+              <button
+                onClick={() => setAddAccountTab('batch')}
+                className={`pb-3 transition-colors border-b-2 ${addAccountTab === 'batch' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+              >
+                {lang === 'zh' ? '批量导入 (JSON)' : 'Batch JSON'}
+              </button>
+              <button
+                onClick={() => setAddAccountTab('local')}
+                className={`pb-3 transition-colors border-b-2 ${addAccountTab === 'local' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+              >
+                {lang === 'zh' ? '本机客户端导入' : 'Local Auth'}
+              </button>
+            </div>
+
+            {/* Tab 1: PAT */}
+            {addAccountTab === 'pat' && (
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                    {lang === 'zh' ? 'Qoder Personal Access Token (PAT) *' : 'Qoder PAT Token *'}
+                  </label>
+                  <input
+                    type="password"
+                    value={addAccountPat}
+                    onChange={e => setAddAccountPat(e.target.value)}
+                    placeholder="pat_..."
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                    {lang === 'zh' ? '账号备注名称 (可选)' : 'Account Alias / Note (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={addAccountName}
+                    onChange={e => setAddAccountName(e.target.value)}
+                    placeholder={lang === 'zh' ? '例如：开发主账号 / VIP 1' : 'e.g. Main Account'}
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                  />
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/60 text-xs text-blue-900 leading-relaxed">
+                  <p className="font-semibold mb-1">💡 如何获取 PAT 令牌：</p>
+                  <p>登录 Qoder 官网个人中心 (Settings -&gt; Personal Access Tokens) 创建一个 PAT，复制粘贴到上方即可自动验证并接入账号池参与轮询与并发请求。</p>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAccountModal(false)}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                  >
+                    {lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddAccountPat}
+                    disabled={!addAccountPat.trim() || addingAccount}
+                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2"
+                  >
+                    {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
+                    {addingAccount ? (lang === 'zh' ? '验证入库中...' : 'Verifying...') : (lang === 'zh' ? '验证并添加' : 'Verify & Add')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 2: Batch JSON */}
+            {addAccountTab === 'batch' && (
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                    {lang === 'zh' ? '粘贴注册机导出的 JSON（accounts.json）' : 'Paste registrar JSON'}
+                  </label>
+                  <textarea
+                    value={batchJson}
+                    onChange={e => setBatchJson(e.target.value)}
+                    rows={6}
+                    placeholder='[{ "user_id": "019f...", "name": "...", "token": "dt-...", "refresh_token": "drt-..." }]'
+                    className="w-full p-3.5 rounded-xl border border-hairline bg-white/60 font-mono text-xs text-ink outline-none focus:border-ink/40 transition-colors"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAccountModal(false)}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                  >
+                    {lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={doBatchImport}
+                    disabled={!batchJson.trim()}
+                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm"
+                  >
+                    {lang === 'zh' ? '立即导入' : 'Import Now'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 3: Local Desktop Auth */}
+            {addAccountTab === 'local' && (
+              <div className="p-6 space-y-4">
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-amber-950">
+                    <span className="material-symbols-outlined text-[18px] text-amber-600">warning</span>
+                    {lang === 'zh' ? '仅支持本地运行模式' : 'Local Desktop Only'}
+                  </div>
+                  <p>
+                    {lang === 'zh'
+                      ? '本机导入会自动读取本地桌面端 Qoder 的授权会话文件（~/.config/qoder 或 AppData/qoder）。'
+                      : 'Reads local desktop Qoder session files from ~/.config/qoder or AppData/qoder.'}
+                  </p>
+                  <p className="font-semibold text-red-700">
+                    {lang === 'zh'
+                      ? '注意：若当前服务部署在云端 Linux 服务器或 Docker 容器中，由于没有桌面客户端，此方式无法读取凭据，会报错“auth files not found”。请切回【PAT 令牌添加】！'
+                      : 'Notice: If running on a remote cloud Linux VPS / Docker, local files do not exist. Please use PAT Token instead.'}
+                  </p>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAccountModal(false)}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                  >
+                    {lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await handleImportAuth()
+                      setShowAddAccountModal(false)
+                    }}
+                    disabled={loading}
+                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2"
+                  >
+                    {loading && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
+                    {lang === 'zh' ? '尝试从本机导入' : 'Attempt Local Import'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <ToastContainer toasts={toasts} dismiss={dismissToast} />
     </div>

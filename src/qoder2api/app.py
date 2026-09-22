@@ -203,8 +203,11 @@ async def import_account(verify: None = Depends(check_gateway_token)) -> dict[st
         add_log(f"Imported local Qoder session account: {acc['name']}")
         return {"status": "ok", "account": acc}
     except Exception as exc:
+        msg = str(exc)
+        if "not found" in msg.lower() or "auth files" in msg.lower():
+            msg = "云端 Linux 服务器（Docker）未安装 Qoder 桌面客户端，无法读取本地客户端文件。请使用【PAT 令牌添加】或【批量导入】。"
         add_log(f"Failed to import local session account: {exc}", "ERROR")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=400, detail=msg)
 
 
 @app.post("/ui/accounts/batch-import")
@@ -357,11 +360,13 @@ async def post_ui_config(payload: dict[str, Any], verify: None = Depends(check_g
 async def set_session(payload: dict[str, Any], verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
     global _local_auth_error
     pat = str(payload.get("pat") or os.getenv("QODER_PAT", "")).strip()
+    name_override = str(payload.get("name") or "").strip()
     if not pat:
         raise HTTPException(status_code=400, detail="PAT is required")
     try:
         add_log("Attempting to save session from PAT...")
         sess = await create_session(pat)
+        account_name = name_override or sess.identity.name or "PAT Account"
         
         # Insert or update in SQLite
         with get_db() as conn:
@@ -370,17 +375,17 @@ async def set_session(payload: dict[str, Any], verify: None = Depends(check_gate
                 INSERT OR REPLACE INTO accounts (
                     uid, name, user_type, security_oauth_token, refresh_token, machine_id,
                     enabled, last_status, last_error, region
-                ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', NULL, ?)
                 """,
-                (sess.identity.uid, sess.identity.name or "PAT Account", sess.identity.user_type,
-                 sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id, None, sess.identity.region)
+                (sess.identity.uid, account_name, sess.identity.user_type,
+                 sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id, sess.identity.region)
             )
             
         db_set_settings("active_uid", sess.identity.uid)
         
-        add_log(f"Session saved from PAT. User: {sess.identity.name}")
+        add_log(f"Session saved from PAT. User: {account_name} ({sess.identity.uid})")
         _local_auth_error = None
-        return {"ready": True, "id": sess.identity.uid, "name": sess.identity.name, "user_type": sess.identity.user_type}
+        return {"ready": True, "id": sess.identity.uid, "name": account_name, "user_type": sess.identity.user_type}
     except Exception as exc:
         msg = f"Failed to authenticate with provided PAT: {exc}"
         add_log(msg, "ERROR")
