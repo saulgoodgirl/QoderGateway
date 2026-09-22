@@ -42,6 +42,9 @@ def db_load_accounts() -> dict[str, Any]:
             account["api_mode"] = mode
             account["api_enabled"] = (mode != "disabled")
             account["enabled"] = bool(account.get("enabled", 1))
+            u_type = str(account.get("user_type") or "").lower()
+            plan_val = str(account.get("plan") or "")
+            account["is_enterprise"] = (plan_val == "Teams" or "team" in u_type or "org" in u_type or "enterprise" in u_type)
             accounts.append(account)
         active_uid = db_get_settings("active_uid")
         return {"accounts": accounts, "active_uid": active_uid}

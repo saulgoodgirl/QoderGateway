@@ -14,6 +14,7 @@ interface Account {
   last_status: string
   last_error: string | null; quota: number; is_quota_exceeded: boolean
   plan: string | null; user_tag: string | null; next_reset_at: number | null
+  is_enterprise?: boolean
 }
 interface AccountsConfig { accounts: Account[]; active_uid: string | null }
 interface UIStatus { ready: boolean; mode: string; username: string | null; uid: string | null; user_type: string | null; error: string | null; accounts_count: number }
@@ -30,6 +31,8 @@ interface CheckinAccount {
   uid: string
   name: string
   plan: string
+  user_type?: string
+  is_enterprise?: boolean
   claimed_today: boolean
   status_text: string
   reward_credits: number
@@ -112,7 +115,7 @@ const UI_TEXT = {
       statsAutoScheduleDesc: 'Active · Runs daily at 00:05',
       tableTitle: 'Account Check-in & Credit Balance',
       colAccount: 'Account',
-      colPlan: 'Plan Tier',
+      colPlan: 'User Type (Enterprise/Personal)',
       colStatus: 'Today\'s Status',
       colStreak: 'Streak Days',
       colQuota: 'Available Credits',
@@ -185,7 +188,7 @@ const UI_TEXT = {
       statsAutoScheduleDesc: '运行中 · 每日 00:05 定时执行',
       tableTitle: '账号签到状态与算力明细',
       colAccount: '账号 / 用户名',
-      colPlan: '套餐类型',
+      colPlan: '用户类别 (企业/个人)',
       colStatus: '今日签到状态',
       colStreak: '连续签到',
       colQuota: '当前可用算力',
@@ -299,6 +302,39 @@ function CustomSelect({ value, onChange, options, placeholder }: { value: string
         </div>
       )}
     </div>
+  )
+}
+
+const isEnterpriseAccount = (item?: { is_enterprise?: boolean; plan?: string | null; user_type?: string | null; user_tag?: string | null } | null) => {
+  if (!item) return false
+  if (item.is_enterprise !== undefined) return Boolean(item.is_enterprise)
+  const p = (item.plan || '').toLowerCase()
+  const u = (item.user_type || '').toLowerCase()
+  const tag = (item.user_tag || '').toLowerCase()
+  return p.includes('team') || u.includes('team') || p.includes('org') || tag.includes('org') || p.includes('enterprise')
+}
+
+function UserTypeBadge({
+  account,
+  lang = 'zh',
+}: {
+  account?: { is_enterprise?: boolean; plan?: string | null; user_type?: string | null; user_tag?: string | null } | null
+  lang?: Lang
+}) {
+  const isEnt = isEnterpriseAccount(account)
+  if (isEnt) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs">
+        <span className="material-symbols-outlined text-[15px]">corporate_fare</span>
+        <span>{lang === 'zh' ? '企业用户 (Teams)' : 'Enterprise (Teams)'}</span>
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
+      <span className="material-symbols-outlined text-[15px]">person</span>
+      <span>{lang === 'zh' ? '个人用户 (Personal)' : 'Personal User'}</span>
+    </span>
   )
 }
 
@@ -457,9 +493,13 @@ function MultiAccountSelect({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <span className="truncate text-xs font-bold text-ink">{acc.name}</span>
-                        {acc.plan && (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-ink/5 text-ink/70 font-mono uppercase">
-                            {acc.plan}
+                        {isEnterpriseAccount(acc) ? (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-800 font-bold border border-purple-200 shrink-0">
+                            🏢 企业
+                          </span>
+                        ) : (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-blue-50 text-blue-700 font-bold border border-blue-200 shrink-0">
+                            👤 个人
                           </span>
                         )}
                       </div>
@@ -1580,7 +1620,7 @@ export default function App() {
                       <tr>{[
                         lang === 'zh' ? '账号名称' : 'Account',
                         'UID',
-                        lang === 'zh' ? '类型 / 配额' : 'Plan / Quota',
+                        lang === 'zh' ? '用户类别 / 配额' : 'Type / Quota',
                         lang === 'zh' ? '状态' : 'Status',
                         lang === 'zh' ? 'API 调度模式' : 'API Routing Mode',
                         lang === 'zh' ? '账号总启用' : 'Enabled',
@@ -1626,7 +1666,12 @@ export default function App() {
                                 </div>
                               </td>
                               <td className="px-6 py-5 font-mono text-xs text-body select-all">{acc.uid}</td>
-                              <td className="px-6 py-5"><div className="flex flex-col"><span className="text-xs font-semibold text-ink">{acc.user_tag || acc.plan || 'Trial'}</span><span className="text-[10px] text-body font-mono">Quota: {acc.quota}</span></div></td>
+                              <td className="px-6 py-5">
+                                <div className="flex flex-col items-start gap-1">
+                                  <UserTypeBadge account={acc} lang={lang} />
+                                  <span className="text-[10px] text-body font-mono">Quota: {acc.quota}</span>
+                                </div>
+                              </td>
                               <td className="px-6 py-5">
                                 {acc.is_quota_exceeded ? <span className="px-3 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-red-100 text-red-700">Exceeded</span>
                                 : acc.last_status === 'ok' ? <span className="px-3 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-mint/20 text-ink">Enabled</span>
@@ -1865,9 +1910,7 @@ export default function App() {
                               <div className="font-mono text-[11px] text-body opacity-60 select-all">{acc.uid}</div>
                             </td>
                             <td className="px-6 py-4">
-                              <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-neutral-100 text-neutral-700 capitalize">
-                                {acc.plan || 'Teams'}
-                              </span>
+                              <UserTypeBadge account={acc} lang={lang} />
                             </td>
                             <td className="px-6 py-4">
                               {acc.claimed_today ? (

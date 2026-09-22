@@ -129,13 +129,23 @@ def get_account_quota(uid: str) -> dict[str, Any]:
         org = q_data.get("orgResourcePackage") or {}
         total_remaining = float(uq.get("remaining", 0.0)) + float(addon.get("remaining", 0.0)) + float(org.get("remaining", 0.0))
         is_exceeded = 1 if (bool(q_data.get("isQuotaExceeded")) or total_remaining <= 0) else 0
-        u_type = str(row["user_type"] or "")
-        plan = "Personal" if "personal" in u_type.lower() else "Teams"
-        user_tag = "Resource Pack" if float(addon.get("remaining", 0.0)) > 0 and float(uq.get("remaining", 0.0)) <= 0 else plan
+        
+        # 准确识别用户与账号类别（企业/团队用户 vs 个人用户）
+        raw_u_type = str(q_data.get("userType") or row["user_type"] or "").strip().lower()
+        has_org_pkg = bool(org.get("available")) or float(org.get("remaining", 0.0)) > 0
+        if "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type or has_org_pkg:
+            user_type = "teams"
+            plan = "Teams"
+            user_tag = "Teams (Org Package)" if has_org_pkg else "Teams"
+        else:
+            user_type = "personal"
+            plan = "Personal"
+            user_tag = "Resource Pack" if float(addon.get("remaining", 0.0)) > 0 and float(uq.get("remaining", 0.0)) <= 0 else plan
+
         with get_db() as conn:
             conn.execute(
-                "UPDATE accounts SET quota = ?, is_quota_exceeded = ?, plan = ?, user_tag = ? WHERE uid = ?",
-                (int(total_remaining), is_exceeded, plan, user_tag, uid)
+                "UPDATE accounts SET quota = ?, is_quota_exceeded = ?, user_type = ?, plan = ?, user_tag = ? WHERE uid = ?",
+                (int(total_remaining), is_exceeded, user_type, plan, user_tag, uid)
             )
     except Exception:
         pass

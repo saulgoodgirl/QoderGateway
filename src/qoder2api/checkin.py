@@ -221,9 +221,10 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
     # 简单调用 status 或尝试轻量 claim 校验
     for r in rows:
         uid = r["uid"]
-        name = r["name"]
-        u_type = str(r["user_type"] or "")
-        plan = r["plan"] or ("Personal" if "personal" in u_type.lower() else "Teams")
+        # 从 quota_raw 或数据库动态识别是否为企业/团队版
+        raw_u_type = str(r["user_type"] or "").lower()
+        plan = str(r["plan"] or ("Teams" if "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type else "Personal"))
+        is_enterprise = (plan == "Teams" or "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type)
 
         # 1. 尝试获取配额积分
         user_quota_info = None
@@ -238,6 +239,15 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
                 uq = quota_raw.get("userQuota") or {}
                 addon = quota_raw.get("addOnQuota") or {}
                 org_pkg = quota_raw.get("orgResourcePackage") or {}
+
+                api_u_type = str(quota_raw.get("userType") or "").strip().lower()
+                has_org = bool(org_pkg.get("available")) or float(org_pkg.get("remaining", 0.0)) > 0
+                if "team" in api_u_type or "org" in api_u_type or "enterprise" in api_u_type or has_org:
+                    is_enterprise = True
+                    plan = "Teams"
+                else:
+                    is_enterprise = False
+                    plan = "Personal"
 
                 # 汇总剩余算力：套餐内 + 资源包(加油包) + 组织资源包
                 rem_credits = float(uq.get("remaining", 0.0)) + float(addon.get("remaining", 0.0)) + float(org_pkg.get("remaining", 0.0))
@@ -276,6 +286,8 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
         accounts_detail.append({
             "uid": uid,
             "name": name,
+            "user_type": "teams" if is_enterprise else "personal",
+            "is_enterprise": is_enterprise,
             "plan": plan,
             "claimed_today": is_claimed,
             "status_text": "已签到 (+100)" if is_claimed else "未签到",
