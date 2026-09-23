@@ -42,7 +42,12 @@ interface CheckinAccount {
     remaining: number
     total: number
     used: number
+    plan_remaining?: number
+    addon_remaining?: number
+    org_remaining?: number
+    desc?: string
   } | null
+  quota_desc?: string
   error: string | null
 }
 
@@ -1744,7 +1749,7 @@ export default function App() {
                   <div className="text-xs text-body mt-2">
                     {checkinData?.is_before_10am
                       ? (lang === 'zh' ? '等待 10:00 刷新后自动发放' : 'Available after 10:00')
-                      : (lang === 'zh' ? '每个账号单次奖励 100 Credits' : '+100 credits per successful account')}
+                      : (lang === 'zh' ? '个人版每账号 +100 Credits (企业版走团队资源池)' : '+100 credits for personal accounts')}
                   </div>
                 </div>
 
@@ -1842,7 +1847,7 @@ export default function App() {
                               )}
                             </td>
                             <td className="px-6 py-4 font-mono text-sm text-ink">
-                              {acc.streak_days} <span className="text-xs text-body font-normal">{lang === 'zh' ? '天' : 'days'}</span>
+                              {(acc.streak_days && acc.streak_days > 0) ? acc.streak_days : (acc.claimed_today ? 1 : 0)} <span className="text-xs text-body font-normal">{lang === 'zh' ? '天' : 'days'}</span>
                             </td>
                             <td className="px-6 py-4">
                               {acc.quota_info ? (
@@ -1858,6 +1863,11 @@ export default function App() {
                                       }}
                                     />
                                   </div>
+                                  {(acc.quota_desc || acc.quota_info.desc) && (
+                                    <div className="text-[11px] text-body opacity-80 leading-snug pt-0.5">
+                                      {acc.quota_desc || acc.quota_info.desc}
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <span className="text-xs font-mono text-body">--</span>

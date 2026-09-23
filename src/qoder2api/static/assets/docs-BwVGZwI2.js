@@ -1,4 +1,4 @@
-import{i as e,n as t,r as n,s as r,t as i}from"./jsx-runtime-BiNt3uK6.js";import{i as a,n as o,r as s,t as c}from"./lib-BLV3e3Cx.js";var l=`# Account Pool\r
+import{i as e,n as t,r as n,s as r,t as i}from"./jsx-runtime-MAG2vnIA.js";import{i as a,n as o,r as s,t as c}from"./lib-C1DjEBZN.js";var l=`# Account Pool\r
 \r
 The account pool lets QoderGate route requests through multiple Qoder accounts and recover when one account fails.\r
 \r

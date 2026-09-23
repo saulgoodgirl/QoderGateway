@@ -57,6 +57,10 @@ def init_db():
                 conn.execute("ALTER TABLE accounts ADD COLUMN region TEXT DEFAULT 'cn'")
             if "last_checkin_cycle" not in cols:
                 conn.execute("ALTER TABLE accounts ADD COLUMN last_checkin_cycle TEXT")
+            if "checkin_streak" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN checkin_streak INTEGER DEFAULT 1")
+            if "total_claim_days" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN total_claim_days INTEGER DEFAULT 1")
             # Sync api_mode with api_enabled for any accounts where api_enabled was set to 0
             conn.execute("UPDATE accounts SET api_mode = 'disabled' WHERE api_enabled = 0 AND (api_mode IS NULL OR api_mode = 'all')")
         except Exception:

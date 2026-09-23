@@ -40,6 +40,13 @@ _cached_overview: dict[str, Any] | None = None
 _cached_overview_time: float = 0.0
 
 
+def _safe_float(v: Any, default: float = 0.0) -> float:
+    try:
+        return float(v) if v is not None else default
+    except (ValueError, TypeError):
+        return default
+
+
 def invalidate_checkin_cache() -> None:
     """清理签到概览缓存，强制下次重新计算。"""
     global _cached_overview, _cached_overview_time
@@ -190,13 +197,28 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                 continue
             return {"ok": False, "uid": uid, "name": row["name"], "error": f"Token 过期且刷新失败: {ref.get('error')}"}
 
+        current_cycle = get_current_checkin_cycle()
+        prev_cycle = row["last_checkin_cycle"] if "last_checkin_cycle" in row.keys() else None
+        yesterday_cycle = (datetime.now(TZ_SHANGHAI) - timedelta(days=1)).strftime("%Y-%m-%d")
+        old_streak = int(row["checkin_streak"] if "checkin_streak" in row.keys() and row["checkin_streak"] else 0)
+        old_total = int(row["total_claim_days"] if "total_claim_days" in row.keys() and row["total_claim_days"] else 0)
+
+        if prev_cycle == current_cycle:
+            new_streak = max(1, old_streak)
+            new_total = max(1, old_total)
+        elif prev_cycle == yesterday_cycle:
+            new_streak = old_streak + 1
+            new_total = old_total + 1
+        else:
+            new_streak = 1
+            new_total = max(1, old_total + 1)
+
         if r.status_code == 200:
             data = r.json()
             reward = data.get("rewardCredits", 100)
-            current_cycle = get_current_checkin_cycle()
             try:
                 with get_db() as conn:
-                    conn.execute("UPDATE accounts SET last_checkin_cycle = ? WHERE uid = ?", (current_cycle, uid))
+                    conn.execute("UPDATE accounts SET last_checkin_cycle = ?, checkin_streak = ?, total_claim_days = ? WHERE uid = ?", (current_cycle, new_streak, new_total, uid))
             except Exception:
                 pass
             invalidate_checkin_cache()
@@ -208,16 +230,16 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                 "credits": reward,
                 "uid": uid,
                 "name": row["name"],
+                "streak_days": new_streak,
                 "message": f"签到成功！获得 +{reward} Credits",
                 "raw": data,
             }
 
         if r.status_code == 409:
             # 已经签过到了
-            current_cycle = get_current_checkin_cycle()
             try:
                 with get_db() as conn:
-                    conn.execute("UPDATE accounts SET last_checkin_cycle = ? WHERE uid = ?", (current_cycle, uid))
+                    conn.execute("UPDATE accounts SET last_checkin_cycle = ?, checkin_streak = ?, total_claim_days = ? WHERE uid = ?", (current_cycle, new_streak, new_total, uid))
             except Exception:
                 pass
             invalidate_checkin_cache()
@@ -229,6 +251,7 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                 "credits": 0,
                 "uid": uid,
                 "name": row["name"],
+                "streak_days": new_streak,
                 "message": "今日已签到（奖励已领取）",
             }
 
@@ -346,20 +369,46 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
                     is_enterprise = False
                     plan = "Personal"
 
-                rem_credits = float(uq.get("remaining", 0.0)) + float(addon.get("remaining", 0.0)) + float(org_pkg.get("remaining", 0.0))
-                used_credits = float(uq.get("used", 0.0)) + float(addon.get("used", 0.0)) + float(org_pkg.get("used", 0.0))
-                org_total = float(org_pkg.get("total", 0.0) or (org_pkg.get("cap", 0.0) if org_pkg.get("cap", -1) > 0 else org_pkg.get("remaining", 0.0)))
-                tot_credits = float(uq.get("total", 0.0)) + float(addon.get("total", 0.0)) + org_total
+                plan_rem = _safe_float(uq.get("remaining"))
+                plan_total = _safe_float(uq.get("total"))
+                plan_used = _safe_float(uq.get("used"))
+
+                addon_rem = _safe_float(addon.get("remaining"))
+                addon_total = _safe_float(addon.get("total"))
+                addon_used = _safe_float(addon.get("used"))
+
+                org_rem = _safe_float(org_pkg.get("remaining"))
+                org_total_raw = _safe_float(org_pkg.get("total"))
+                org_cap = _safe_float(org_pkg.get("cap"), -1.0)
+                org_total = org_total_raw if org_total_raw > 0 else (org_cap if org_cap > 0 else org_rem)
+                org_used = _safe_float(org_pkg.get("used"))
+
+                rem_credits = plan_rem + addon_rem + org_rem
+                used_credits = plan_used + addon_used + org_used
+                tot_credits = plan_total + addon_total + org_total
                 if tot_credits < rem_credits + used_credits:
                     tot_credits = rem_credits + used_credits
+
+                if is_enterprise:
+                    quota_desc = f"套餐 {plan_rem:,.0f} + 组织资源 {org_rem:,.0f} (企业版走团队资源池，官方无个人加油包)"
+                elif addon_rem > 0 and plan_rem > 0:
+                    quota_desc = f"基础套餐 {plan_rem:,.0f} + 签到加油包 {addon_rem:,.0f} Credits (30天有效)"
+                elif addon_rem > 0:
+                    quota_desc = f"累计签到加油包 {addon_rem:,.0f} Credits (30天有效)"
+                else:
+                    quota_desc = f"当前可用算力 {rem_credits:,.0f} Credits"
 
                 user_quota_info = {
                     "remaining": rem_credits,
                     "total": tot_credits,
                     "used": used_credits,
+                    "plan_remaining": plan_rem,
+                    "addon_remaining": addon_rem,
+                    "org_remaining": org_rem,
+                    "desc": quota_desc,
                 }
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Error parsing quota usage for {uid}: {e}")
 
         st = get_checkin_status(uid)
         cl_err = None
@@ -380,6 +429,15 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             if not cl.get("ok"):
                 cl_err = cl.get("error")
 
+        official_streak = int(st.get("streak_days") or 0)
+        official_total = int(st.get("total_claim_days") or 0)
+        local_streak = int(r["checkin_streak"] if "checkin_streak" in r.keys() and r["checkin_streak"] else 1)
+        local_total = int(r["total_claim_days"] if "total_claim_days" in r.keys() and r["total_claim_days"] else 1)
+        
+        # 只要当前已签到，连续签到天数绝不允许为 0！官方接口遗留bug返回0时，按本地真实连签展示 (保底 1 天)
+        display_streak = official_streak if official_streak > 0 else (local_streak if is_claimed else 0)
+        display_total = official_total if official_total > 0 else (local_total if is_claimed else 0)
+
         return {
             "uid": uid,
             "name": name,
@@ -390,9 +448,10 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             "status_code": status_code,
             "status_text": status_text,
             "reward_credits": st.get("reward_credits", 100) if st.get("ok") else 100,
-            "streak_days": st.get("streak_days", 0) if st.get("ok") else 0,
-            "total_claim_days": st.get("total_claim_days", 0) if st.get("ok") else 0,
+            "streak_days": display_streak,
+            "total_claim_days": display_total,
             "quota_info": user_quota_info,
+            "quota_desc": user_quota_info.get("desc") if user_quota_info else ("企业版走组织资源池" if is_enterprise else "含每日签到福利"),
             "rem_credits": rem_credits,
             "error": cl_err,
         }
@@ -407,7 +466,8 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
     claimed_count = sum(1 for a in accounts_detail if a["status_code"] == "claimed")
     pending_count = sum(1 for a in accounts_detail if a["status_code"] == "pending")
     waiting_count = sum(1 for a in accounts_detail if a["status_code"] == "waiting_refresh")
-    total_credits_claimed_today = claimed_count * 100
+    personal_claimed_count = sum(1 for a in accounts_detail if a["status_code"] == "claimed" and not a["is_enterprise"])
+    total_credits_claimed_today = personal_claimed_count * 100
     total_remaining_credits = round(sum(a.pop("rem_credits", 0.0) for a in accounts_detail), 1)
 
     result = {
