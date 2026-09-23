@@ -103,14 +103,51 @@ def _headers(token: str, client_type: str = "10") -> dict[str, str]:
     }
 
 
+def is_enterprise_account(row: Any) -> bool:
+    """判断是否为企业版/团队版账号（免签且不参与每日个人签到加油包福利）。"""
+    if row is None:
+        return False
+    u_type = ""
+    plan = ""
+    if isinstance(row, dict):
+        u_type = str(row.get("user_type") or "").strip().lower()
+        plan = str(row.get("plan") or "").strip().lower()
+    else:
+        try:
+            u_type = str(row["user_type"] or "").strip().lower()
+        except (KeyError, IndexError, TypeError):
+            pass
+        try:
+            plan = str(row["plan"] or "").strip().lower()
+        except (KeyError, IndexError, TypeError):
+            pass
+    return "team" in u_type or "org" in u_type or "enterprise" in u_type or "team" in plan or "enterprise" in plan
+
+
 def get_checkin_status(uid: str) -> dict[str, Any]:
     """查询单个账号的今日活动签到状态与连续签到天数。
     对接 Qoder 官方最新 Campaigns 体系 (Cosy-ClientType: 10)。
+    企业版账号直接返回免签，不向上游请求。
     """
     with get_db() as conn:
         row = conn.execute("SELECT * FROM accounts WHERE uid = ?", (uid,)).fetchone()
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
+
+    if is_enterprise_account(row):
+        return {
+            "ok": True,
+            "uid": uid,
+            "name": row["name"],
+            "has_campaign": False,
+            "is_enterprise": True,
+            "claimable": False,
+            "claimed": False,
+            "reward_credits": 0,
+            "streak_days": 0,
+            "total_claim_days": 0,
+            "message": "企业团队账号不参与每日签到活动",
+        }
 
     token = (row["security_oauth_token"] or "").strip()
     if not token:
@@ -216,11 +253,25 @@ def get_checkin_status(uid: str) -> dict[str, Any]:
 def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
     """为单个账号执行每日签到领取 100 Credits。
     优先调用官方真实活动权益接口: POST /sash/api/v1/me/campaigns/{campaign_id}/claim
+    企业团队版账号自动拦截不参与。
     """
     with get_db() as conn:
         row = conn.execute("SELECT * FROM accounts WHERE uid = ?", (uid,)).fetchone()
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
+
+    if is_enterprise_account(row):
+        return {
+            "ok": True,
+            "claimed": False,
+            "already_claimed": False,
+            "waiting_refresh": False,
+            "is_enterprise": True,
+            "credits": 0,
+            "uid": uid,
+            "name": row["name"],
+            "message": "企业团队账号由组织分配算力，不参与每日个人签到活动",
+        }
 
     now_sh = datetime.now(TZ_SHANGHAI)
     if now_sh.hour < 10 and not force:
@@ -357,30 +408,31 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                     "message": f"签到成功！官方 +{total_gained} Credits 实时到账！" if total_gained > 0 else "今日签到福利已领取",
                 }
 
-        # 如果没有 campaigns (例如企业账号)
-        raw_u_type = str(row["user_type"] or "").lower()
-        is_ent = "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type
+        # 如果没有 campaigns
         return {
             "ok": True,
             "claimed": False,
-            "already_claimed": is_ent,
+            "already_claimed": False,
             "waiting_refresh": False,
             "credits": 0,
             "uid": uid,
             "name": row["name"],
-            "streak_days": new_streak if is_ent else 0,
-            "message": "企业团队账号免签，共享组织资源池" if is_ent else "当前暂无可领取的官方活动",
+            "streak_days": 0,
+            "message": "当前暂无可领取的官方活动",
         }
 
     return {"ok": False, "uid": uid, "name": row["name"], "error": "未知错误重试耗尽"}
 
 
 def checkin_all_accounts(force: bool = False) -> dict[str, Any]:
-    """为数据库中所有启用的账号执行签到。"""
+    """为数据库中所有启用的个人版账号执行签到（自动剔除免签的企业团队版）。"""
     with get_db() as conn:
-        rows = conn.execute(
-            "SELECT uid, name FROM accounts WHERE enabled = 1"
+        all_rows = conn.execute(
+            "SELECT uid, name, user_type, plan FROM accounts WHERE enabled = 1"
         ).fetchall()
+
+    # 彻底剔除企业版账号，只让个人版账号参与签到
+    rows = [r for r in all_rows if not is_enterprise_account(r)]
 
     now_sh = datetime.now(TZ_SHANGHAI)
     if now_sh.hour < 10 and not force:
@@ -428,7 +480,7 @@ def checkin_all_accounts(force: bool = False) -> dict[str, Any]:
 
 
 def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
-    """获取所有启用账号的签到概览、今日状态及配额积分（支持 30 秒内存缓存与线程池并发查询）。"""
+    """获取所有启用个人账号的签到概览、今日状态及配额积分（企业版不参与已彻底剔除）。"""
     global _cached_overview, _cached_overview_time
     now_ts = time.time()
 
@@ -440,7 +492,11 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             return cached
 
     with get_db() as conn:
-        rows = conn.execute("SELECT * FROM accounts WHERE enabled = 1").fetchall()
+        all_rows = conn.execute("SELECT * FROM accounts WHERE enabled = 1").fetchall()
+
+    # 彻底剔除企业版账号，只让个人版账号参与每日签到中心！
+    personal_rows = [r for r in all_rows if not is_enterprise_account(r)]
+    enterprise_rows = [r for r in all_rows if is_enterprise_account(r)]
 
     now_sh = datetime.now(TZ_SHANGHAI)
     is_before_10am = (now_sh.hour < 10)
@@ -450,9 +506,7 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
     def process_single_account(r: Any) -> dict[str, Any]:
         uid = r["uid"]
         name = r["name"]
-        raw_u_type = str(r["user_type"] or "").lower()
-        plan = str(r["plan"] or ("Teams" if "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type else "Personal"))
-        is_enterprise = (plan == "Teams" or "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type)
+        plan = "Personal"
 
         user_quota_info = None
         rem_credits = 0.0
@@ -465,16 +519,6 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
                 quota_raw = q_res.get("quota", {})
                 uq = quota_raw.get("userQuota") or {}
                 addon = quota_raw.get("addOnQuota") or {}
-                org_pkg = quota_raw.get("orgResourcePackage") or {}
-
-                api_u_type = str(quota_raw.get("userType") or "").strip().lower()
-                has_org = bool(org_pkg.get("available")) or float(org_pkg.get("remaining", 0.0)) > 0
-                if "team" in api_u_type or "org" in api_u_type or "enterprise" in api_u_type or has_org:
-                    is_enterprise = True
-                    plan = "Teams"
-                else:
-                    is_enterprise = False
-                    plan = "Personal"
 
                 plan_rem = _safe_float(uq.get("remaining"))
                 plan_total = _safe_float(uq.get("total"))
@@ -484,21 +528,13 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
                 addon_total = _safe_float(addon.get("total"))
                 addon_used = _safe_float(addon.get("used"))
 
-                org_rem = _safe_float(org_pkg.get("remaining"))
-                org_total_raw = _safe_float(org_pkg.get("total"))
-                org_cap = _safe_float(org_pkg.get("cap"), -1.0)
-                org_total = org_total_raw if org_total_raw > 0 else (org_cap if org_cap > 0 else org_rem)
-                org_used = _safe_float(org_pkg.get("used"))
-
-                rem_credits = plan_rem + addon_rem + org_rem
-                used_credits = plan_used + addon_used + org_used
-                tot_credits = plan_total + addon_total + org_total
+                rem_credits = plan_rem + addon_rem
+                used_credits = plan_used + addon_used
+                tot_credits = plan_total + addon_total
                 if tot_credits < rem_credits + used_credits:
                     tot_credits = rem_credits + used_credits
 
-                if is_enterprise:
-                    quota_desc = f"套餐 {plan_rem:,.0f} + 组织资源 {org_rem:,.0f} (企业版走团队资源池，官方无个人加油包)"
-                elif addon_rem > 0 and plan_rem > 0:
+                if addon_rem > 0 and plan_rem > 0:
                     quota_desc = f"基础套餐 {plan_rem:,.0f} + 签到加油包 {addon_rem:,.0f} Credits (30天有效)"
                 elif addon_rem > 0:
                     quota_desc = f"累计签到加油包 {addon_rem:,.0f} Credits (30天有效)"
@@ -511,7 +547,6 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
                     "used": used_credits,
                     "plan_remaining": plan_rem,
                     "addon_remaining": addon_rem,
-                    "org_remaining": org_rem,
                     "desc": quota_desc,
                 }
         except Exception as e:
@@ -525,13 +560,8 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             status_code = "waiting_refresh"
             status_text = "待 10:00 刷新"
             is_claimed = False
-        elif is_enterprise or st.get("is_enterprise"):
-            status_code = "claimed"
-            status_text = "企业免签"
-            is_claimed = True
         else:
             if st.get("claimable"):
-                # 自动替用户领取入账，无需用户手动操作！
                 cl = claim_checkin(uid)
                 is_claimed = bool(cl.get("claimed") or cl.get("already_claimed"))
                 status_code = "claimed" if is_claimed else "pending"
@@ -568,14 +598,14 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
         # 连续签到与累计签到天数显示：只要今天已领，保底至少显示 1 天
         local_streak = int(r["checkin_streak"] if "checkin_streak" in r.keys() and r["checkin_streak"] else 1)
         local_total = int(r["total_claim_days"] if "total_claim_days" in r.keys() and r["total_claim_days"] else 1)
-        display_streak = max(1, local_streak) if (is_claimed and not is_enterprise) else (0 if not is_claimed else local_streak)
-        display_total = max(1, local_total) if (is_claimed and not is_enterprise) else (0 if not is_claimed else local_total)
+        display_streak = max(1, local_streak) if is_claimed else 0
+        display_total = max(1, local_total) if is_claimed else local_total
 
         return {
             "uid": uid,
             "name": name,
-            "user_type": "teams" if is_enterprise else "personal",
-            "is_enterprise": is_enterprise,
+            "user_type": "personal",
+            "is_enterprise": False,
             "plan": plan,
             "claimed_today": is_claimed,
             "status_code": status_code,
@@ -584,38 +614,42 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             "streak_days": display_streak,
             "total_claim_days": display_total,
             "quota_info": user_quota_info,
-            "quota_desc": user_quota_info.get("desc") if user_quota_info else ("企业版走组织资源池" if is_enterprise else "含每日签到福利"),
+            "quota_desc": user_quota_info.get("desc") if user_quota_info else "含每日签到福利",
             "rem_credits": rem_credits,
             "error": cl_err,
         }
 
     # 2. 多账号并发查询，彻底消除串行累加等待
-    if len(rows) > 0:
-        with ThreadPoolExecutor(max_workers=min(len(rows), 8)) as executor:
-            accounts_detail = list(executor.map(process_single_account, rows))
+    if len(personal_rows) > 0:
+        with ThreadPoolExecutor(max_workers=min(len(personal_rows), 8)) as executor:
+            accounts_detail = list(executor.map(process_single_account, personal_rows))
     else:
         accounts_detail = []
 
     claimed_count = sum(1 for a in accounts_detail if a["status_code"] == "claimed")
     pending_count = sum(1 for a in accounts_detail if a["status_code"] == "pending")
     waiting_count = sum(1 for a in accounts_detail if a["status_code"] == "waiting_refresh")
-    personal_claimed_count = sum(1 for a in accounts_detail if a["status_code"] == "claimed" and not a["is_enterprise"])
-    total_credits_claimed_today = personal_claimed_count * 100
-    total_remaining_credits = round(sum(a.pop("rem_credits", 0.0) for a in accounts_detail), 1)
+    total_credits_claimed_today = claimed_count * 100
+    personal_remaining_credits = round(sum(a.pop("rem_credits", 0.0) for a in accounts_detail), 1)
+
+    enterprise_remaining_credits = sum(_safe_float(r["quota"]) for r in enterprise_rows)
+    pool_total_remaining_credits = round(personal_remaining_credits + enterprise_remaining_credits, 1)
 
     result = {
-        "total_accounts": len(rows),
+        "total_accounts": len(personal_rows),
         "claimed_count": claimed_count,
         "pending_count": pending_count,
         "waiting_count": waiting_count,
         "is_before_10am": is_before_10am,
         "total_credits_claimed_today": total_credits_claimed_today,
-        "total_remaining_credits": total_remaining_credits,
+        "total_remaining_credits": personal_remaining_credits,
+        "pool_total_remaining_credits": pool_total_remaining_credits,
+        "enterprise_excluded_count": len(enterprise_rows),
         "accounts": accounts_detail,
         "last_auto_date": _last_auto_checkin_cycle,
         "cycle_id": current_cycle,
         "next_refresh_seconds": next_refresh_seconds,
-        "refresh_rule": "每日 10:00 (UTC+8) 刷新，领取后 30 天有效 + 100 Credits",
+        "refresh_rule": "每日 10:00 (UTC+8) 刷新，个人版领取后 30 天有效 + 100 Credits (企业免签版已自动剔除)",
     }
 
     with _checkin_cache_lock:

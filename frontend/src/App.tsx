@@ -59,12 +59,15 @@ interface CheckinOverview {
   is_before_10am?: boolean
   total_credits_claimed_today: number
   total_remaining_credits: number
+  pool_total_remaining_credits?: number
+  enterprise_excluded_count?: number
   accounts: CheckinAccount[]
   last_auto_date: string | null
   cycle_id?: string
   next_refresh_seconds?: number
   refresh_rule?: string
 }
+
 
 interface RegTask {
   stage: string
@@ -140,7 +143,7 @@ const UI_TEXT = {
     accounts: { desc: 'Manage Qoder accounts used by the gateway. Toggle "API Routing" to include/exclude accounts from external calls while keeping daily check-ins active.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add a PAT from Dashboard.', showing: 'Showing {count} account(s)' },
     checkin: {
       bannerTitle: 'Daily Rewards · 100 Credits Per Account',
-      desc: 'Claim 100 free compute credits every day for each Qoder account. Resets daily at 10:00 (UTC+8), valid for 30 days. Gateway auto-worker runs daily at 10:00:05 (UTC+8) to claim automatically.',
+      desc: 'Claim 100 free compute credits every day for each personal Qoder account (Enterprise/Teams accounts are excluded as they share organization resources). Resets daily at 10:00 (UTC+8), valid for 30 days. Gateway auto-worker runs daily at 10:00:05 (UTC+8) to claim automatically.',
       claimAll: 'Claim All Accounts Today',
       claiming: 'Claiming Rewards...',
       refresh: 'Refresh Status',
@@ -217,8 +220,8 @@ const UI_TEXT = {
     },
     accounts: { desc: '管理网关用于请求路由和失败切换的 Qoder 账号。可单独控制账号是否参与 API 调用调度（排除调用仍享每日自动签到与令牌保活）。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击导入账号，或在控制台添加 PAT。', showing: '共 {count} 个账号' },
     checkin: {
-      bannerTitle: '每日签到福利 · 每个账号 +100 Credits',
-      desc: '每个 Qoder 账号每天可免费领取 100 算力 Credits。官方每日 10:00 (UTC+8) 准时刷新，领取后 30 天有效。网关后台守护线程将在每日 10:00:05 准时自动执行签到补领，也可随时一键为全部账号领完。',
+      bannerTitle: '每日签到福利 · 每个个人账号 +100 Credits',
+      desc: '每个 Qoder 个人账号每天可免费领取 100 算力 Credits（企业团队版由组织统一分配算力，不参与每日签到已自动剔除）。官方每日 10:00 (UTC+8) 准时刷新，领取后 30 天有效。网关后台守护线程将在每日 10:00:05 准时自动执行签到补领，也可随时一键为全部账号领完。',
       claimAll: '一键签到全部账号',
       claiming: '正在签到领取中...',
       refresh: '刷新签到状态',
@@ -1749,13 +1752,13 @@ export default function App() {
                   <div className="text-xs text-body mt-2">
                     {checkinData?.is_before_10am
                       ? (lang === 'zh' ? '等待 10:00 刷新后自动发放' : 'Available after 10:00')
-                      : (lang === 'zh' ? '个人版每账号 +100 Credits (企业版走团队资源池)' : '+100 credits for personal accounts')}
+                      : (lang === 'zh' ? '个人版每账号单次奖励 100 Credits' : '+100 credits for personal accounts')}
                   </div>
                 </div>
 
                 <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
                   <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
-                    <span>{t.checkin.statsTotalCredits}</span>
+                    <span>{lang === 'zh' ? '个人可用总算力' : 'Personal Credits'}</span>
                     <span className="material-symbols-outlined text-base text-purple-500">token</span>
                   </div>
                   <div className="text-3xl font-bold text-ink">
@@ -1763,7 +1766,9 @@ export default function App() {
                     <span className="text-xs font-semibold text-body ml-1 uppercase">Credits</span>
                   </div>
                   <div className="text-xs text-body mt-2">
-                    {lang === 'zh' ? '账号池可用总剩余算力' : 'Total remaining across all pool accounts'}
+                    {lang === 'zh'
+                      ? (checkinData?.enterprise_excluded_count ? `共 ${(checkinData?.total_accounts ?? 0)} 个个人账号 (企业版不参与已剔除)` : '参与签到个人账号可用总剩余算力')
+                      : 'Total remaining across personal check-in accounts'}
                   </div>
                 </div>
 
@@ -1792,8 +1797,13 @@ export default function App() {
                     <span className="material-symbols-outlined text-ink text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>card_giftcard</span>
                     <h4 className="text-sm font-bold text-ink">{t.checkin.tableTitle}</h4>
                   </div>
-                  <div className="text-xs text-body">
-                    {lang === 'zh' ? `共 ${checkinData?.accounts?.length ?? 0} 个账号` : `${checkinData?.accounts?.length ?? 0} accounts`}
+                  <div className="text-xs text-body flex items-center gap-2">
+                    <span>{lang === 'zh' ? `共 ${checkinData?.accounts?.length ?? 0} 个个人账号` : `${checkinData?.accounts?.length ?? 0} personal accounts`}</span>
+                    {Boolean(checkinData?.enterprise_excluded_count) && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neutral-100 text-neutral-600 border border-neutral-200">
+                        {lang === 'zh' ? `已剔除 ${checkinData?.enterprise_excluded_count} 个企业免签账号` : `${checkinData?.enterprise_excluded_count} enterprise account(s) excluded`}
+                      </span>
+                    )}
                   </div>
                 </div>
 
