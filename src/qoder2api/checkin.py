@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
 from typing import Any
 
@@ -32,6 +33,19 @@ TZ_SHANGHAI = timezone(timedelta(hours=8))
 _last_auto_checkin_cycle: str | None = None
 _checkin_thread: threading.Thread | None = None
 _checkin_lock = threading.Lock()
+
+# 签到概览内存缓存（30 秒 TTL，避免频繁打满上游 HTTP）
+_checkin_cache_lock = threading.Lock()
+_cached_overview: dict[str, Any] | None = None
+_cached_overview_time: float = 0.0
+
+
+def invalidate_checkin_cache() -> None:
+    """清理签到概览缓存，强制下次重新计算。"""
+    global _cached_overview, _cached_overview_time
+    with _checkin_cache_lock:
+        _cached_overview = None
+        _cached_overview_time = 0.0
 
 
 def get_current_checkin_cycle() -> str:
@@ -185,6 +199,7 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                     conn.execute("UPDATE accounts SET last_checkin_cycle = ? WHERE uid = ?", (current_cycle, uid))
             except Exception:
                 pass
+            invalidate_checkin_cache()
             return {
                 "ok": True,
                 "claimed": True,
@@ -205,6 +220,7 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                     conn.execute("UPDATE accounts SET last_checkin_cycle = ? WHERE uid = ?", (current_cycle, uid))
             except Exception:
                 pass
+            invalidate_checkin_cache()
             return {
                 "ok": True,
                 "claimed": False,
@@ -270,6 +286,7 @@ def checkin_all_accounts(force: bool = False) -> dict[str, Any]:
         else:
             failed_count += 1
 
+    invalidate_checkin_cache()
     return {
         "total": len(rows),
         "claimed": claimed_count,
@@ -280,8 +297,18 @@ def checkin_all_accounts(force: bool = False) -> dict[str, Any]:
     }
 
 
-def get_all_accounts_checkin_overview() -> dict[str, Any]:
-    """获取所有启用账号的签到概览、今日状态及配额积分。"""
+def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
+    """获取所有启用账号的签到概览、今日状态及配额积分（支持 30 秒内存缓存与线程池并发查询）。"""
+    global _cached_overview, _cached_overview_time
+    now_ts = time.time()
+
+    # 1. 命中 30 秒缓存时直接毫秒级返回
+    with _checkin_cache_lock:
+        if not force and _cached_overview is not None and (now_ts - _cached_overview_time < 30.0):
+            cached = dict(_cached_overview)
+            cached["next_refresh_seconds"] = get_seconds_until_next_refresh()
+            return cached
+
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM accounts WHERE enabled = 1").fetchall()
 
@@ -290,22 +317,13 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
     current_cycle = get_current_checkin_cycle()
     next_refresh_seconds = get_seconds_until_next_refresh()
 
-    accounts_detail = []
-    claimed_count = 0
-    pending_count = 0
-    waiting_count = 0
-    total_credits_claimed_today = 0
-    total_remaining_credits = 0.0
-
-    for r in rows:
+    def process_single_account(r: Any) -> dict[str, Any]:
         uid = r["uid"]
         name = r["name"]
-        # 从 quota_raw 或数据库动态识别是否为企业/团队版
         raw_u_type = str(r["user_type"] or "").lower()
         plan = str(r["plan"] or ("Teams" if "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type else "Personal"))
         is_enterprise = (plan == "Teams" or "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type)
 
-        # 1. 尝试获取配额积分
         user_quota_info = None
         rem_credits = 0.0
         tot_credits = 0.0
@@ -328,10 +346,8 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
                     is_enterprise = False
                     plan = "Personal"
 
-                # 汇总剩余算力：套餐内 + 资源包(加油包) + 组织资源包
                 rem_credits = float(uq.get("remaining", 0.0)) + float(addon.get("remaining", 0.0)) + float(org_pkg.get("remaining", 0.0))
                 used_credits = float(uq.get("used", 0.0)) + float(addon.get("used", 0.0)) + float(org_pkg.get("used", 0.0))
-
                 org_total = float(org_pkg.get("total", 0.0) or (org_pkg.get("cap", 0.0) if org_pkg.get("cap", -1) > 0 else org_pkg.get("remaining", 0.0)))
                 tot_credits = float(uq.get("total", 0.0)) + float(addon.get("total", 0.0)) + org_total
                 if tot_credits < rem_credits + used_credits:
@@ -345,39 +361,26 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
         except Exception:
             pass
 
-        total_remaining_credits += rem_credits
-
-        # 2. 查询签到状态
         st = get_checkin_status(uid)
         cl_err = None
 
         if is_before_10am:
-            # 10:00 之前：今天的签到尚未开放，处于等待官方 10:00 刷新阶段
             status_code = "waiting_refresh"
             status_text = "待 10:00 刷新"
-            waiting_count += 1
             is_claimed = False
         else:
-            # 10:00 之后：今日已开放签到，进行幂等检查/补签
             cl = claim_checkin(uid)
             is_claimed = bool(cl.get("claimed") or cl.get("already_claimed"))
-            if cl.get("claimed"):
-                claimed_count += 1
-                total_credits_claimed_today += cl.get("credits", 100)
-                status_code = "claimed"
-                status_text = "已签到 (+100)"
-            elif cl.get("already_claimed"):
-                claimed_count += 1
+            if cl.get("claimed") or cl.get("already_claimed"):
                 status_code = "claimed"
                 status_text = "已签到 (+100)"
             else:
-                pending_count += 1
                 status_code = "pending"
                 status_text = "待签到"
             if not cl.get("ok"):
                 cl_err = cl.get("error")
 
-        accounts_detail.append({
+        return {
             "uid": uid,
             "name": name,
             "user_type": "teams" if is_enterprise else "personal",
@@ -390,23 +393,43 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
             "streak_days": st.get("streak_days", 0) if st.get("ok") else 0,
             "total_claim_days": st.get("total_claim_days", 0) if st.get("ok") else 0,
             "quota_info": user_quota_info,
+            "rem_credits": rem_credits,
             "error": cl_err,
-        })
+        }
 
-    return {
+    # 2. 多账号并发查询，彻底消除串行累加等待
+    if len(rows) > 0:
+        with ThreadPoolExecutor(max_workers=min(len(rows), 8)) as executor:
+            accounts_detail = list(executor.map(process_single_account, rows))
+    else:
+        accounts_detail = []
+
+    claimed_count = sum(1 for a in accounts_detail if a["status_code"] == "claimed")
+    pending_count = sum(1 for a in accounts_detail if a["status_code"] == "pending")
+    waiting_count = sum(1 for a in accounts_detail if a["status_code"] == "waiting_refresh")
+    total_credits_claimed_today = claimed_count * 100
+    total_remaining_credits = round(sum(a.pop("rem_credits", 0.0) for a in accounts_detail), 1)
+
+    result = {
         "total_accounts": len(rows),
         "claimed_count": claimed_count,
         "pending_count": pending_count,
         "waiting_count": waiting_count,
         "is_before_10am": is_before_10am,
         "total_credits_claimed_today": total_credits_claimed_today,
-        "total_remaining_credits": round(total_remaining_credits, 1),
+        "total_remaining_credits": total_remaining_credits,
         "accounts": accounts_detail,
         "last_auto_date": _last_auto_checkin_cycle,
         "cycle_id": current_cycle,
         "next_refresh_seconds": next_refresh_seconds,
         "refresh_rule": "每日 10:00 (UTC+8) 刷新，领取后 30 天有效 + 100 Credits",
     }
+
+    with _checkin_cache_lock:
+        _cached_overview = result
+        _cached_overview_time = now_ts
+
+    return result
 
 
 # ---------------------------------------------------------------------------

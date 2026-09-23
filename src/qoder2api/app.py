@@ -157,18 +157,29 @@ async def documents() -> HTMLResponse:
 @app.get("/ui/status")
 async def status(verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
     global _local_auth_error
-    try:
-        await get_session()
-    except Exception:
-        pass
-
     data = db_load_accounts()
+    if not data["accounts"]:
+        try:
+            await get_session()
+            data = db_load_accounts()
+        except Exception:
+            pass
+
     active_uid = data.get("active_uid")
     active_acc = None
     for acc in data["accounts"]:
         if acc["uid"] == active_uid:
             active_acc = acc
             break
+
+    # 若未命中 active_uid 但存在账号，自动回退到第一个有效账号
+    if active_acc is None and data["accounts"]:
+        for acc in data["accounts"]:
+            if acc.get("enabled", True):
+                active_acc = acc
+                break
+        if active_acc is None:
+            active_acc = data["accounts"][0]
 
     if active_acc is not None:
         return {
@@ -339,10 +350,11 @@ async def get_logs(verify: None = Depends(check_gateway_token)) -> list[str]:
 
 
 @app.get("/ui/checkin/status")
-async def checkin_status_endpoint(verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+async def checkin_status_endpoint(force: bool = False, verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
     """获取所有启用账号的每日签到状态与算力统计概览。"""
+    from starlette.concurrency import run_in_threadpool
     try:
-        return get_all_accounts_checkin_overview()
+        return await run_in_threadpool(get_all_accounts_checkin_overview, force=force)
     except Exception as exc:
         add_log(f"Checkin status query error: {exc}", "ERROR")
         raise HTTPException(status_code=500, detail=str(exc))
@@ -351,20 +363,21 @@ async def checkin_status_endpoint(verify: None = Depends(check_gateway_token)) -
 @app.post("/ui/checkin/claim")
 async def checkin_claim_endpoint(payload: dict[str, Any] | None = None, verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
     """执行每日签到。传入 {"uid": "..."} 签到单个账号，否则签到全部 enabled 账号。"""
+    from starlette.concurrency import run_in_threadpool
     payload = payload or {}
     uid = payload.get("uid")
     if uid:
-        res = claim_checkin(uid)
+        res = await run_in_threadpool(claim_checkin, uid)
         msg = res.get("message") or res.get("error")
         add_log(f"Manual check-in for {res.get('name', uid)}: {msg}")
         return {"status": "ok", "result": res}
 
-    res = checkin_all_accounts()
+    res = await run_in_threadpool(checkin_all_accounts)
     add_log(
         f"Manual check-in all: claimed={res['claimed']}, already={res['already_claimed']}, "
-        f"failed={res['failed']}, credits=+{res['total_credits']}"
+        f"failed={res['failed']}, credits={res['total_credits']}"
     )
-    return {"status": "ok", **res}
+    return {"status": "ok", "result": res, **res}
 
 
 @app.post("/ui/registrar/start")

@@ -444,12 +444,57 @@ export default function App() {
   const [verifying, setVerifying] = useState(false)
   const [loginSuccess, setLoginSuccess] = useState(false)
 
-  const [activeTab, setActiveTab] = useState<AppTabId>('dashboard')
-  const [status, setStatus] = useState<UIStatus>({ ready: false, mode: 'none', username: null, uid: null, user_type: null, error: null, accounts_count: 0 })
-  const [accountsConfig, setAccountsConfig] = useState<AccountsConfig>({ accounts: [], active_uid: null })
-  const [apiConfig, setApiConfig] = useState<APIConfig>({ auth_required: false, allowed_keys: [] })
+  const [activeTab, setActiveTab] = useState<AppTabId>(() => {
+    try {
+      const stored = localStorage.getItem('qodergate_active_tab') as AppTabId
+      if (stored && ['dashboard', 'accounts', 'checkin', 'api-keys', 'logs', 'register'].includes(stored)) {
+        return stored
+      }
+    } catch {}
+    return 'dashboard'
+  })
+  const [status, setStatus] = useState<UIStatus>(() => {
+    try {
+      const cached = localStorage.getItem('qodergate_cached_status')
+      if (cached) return JSON.parse(cached)
+    } catch {}
+    return { ready: false, mode: 'none', username: null, uid: null, user_type: null, error: null, accounts_count: 0 }
+  })
+  const [accountsConfig, setAccountsConfig] = useState<AccountsConfig>(() => {
+    try {
+      const cached = localStorage.getItem('qodergate_cached_accounts')
+      if (cached) return JSON.parse(cached)
+    } catch {}
+    return { accounts: [], active_uid: null }
+  })
+  const [apiConfig, setApiConfig] = useState<APIConfig>(() => {
+    try {
+      const cached = localStorage.getItem('qodergate_cached_api_config')
+      if (cached) return JSON.parse(cached)
+    } catch {}
+    return { auth_required: false, allowed_keys: [] }
+  })
   const [logs, setLogs] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    try { localStorage.setItem('qodergate_active_tab', activeTab) } catch {}
+  }, [activeTab])
+  useEffect(() => {
+    if (status.ready || status.accounts_count > 0) {
+      try { localStorage.setItem('qodergate_cached_status', JSON.stringify(status)) } catch {}
+    }
+  }, [status])
+  useEffect(() => {
+    if (accountsConfig.accounts.length > 0) {
+      try { localStorage.setItem('qodergate_cached_accounts', JSON.stringify(accountsConfig)) } catch {}
+    }
+  }, [accountsConfig])
+  useEffect(() => {
+    if (apiConfig.allowed_keys.length > 0 || apiConfig.auth_required) {
+      try { localStorage.setItem('qodergate_cached_api_config', JSON.stringify(apiConfig)) } catch {}
+    }
+  }, [apiConfig])
 
   const [chatMessages, setChatMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hello! I am the QoderGate AI assistant. Ask me anything — I support Markdown and LaTeX math.' }
@@ -769,11 +814,20 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return
-    fetchStatus(); fetchAccounts(); fetchApiConfig(); fetchLogs(); fetchRegStatus(); fetchCheckinStatus()
+    // 基础核心状态秒级拉取（轻量无阻塞）
+    fetchStatus()
+    fetchAccounts()
+    fetchApiConfig()
+
+    // 按当前所处 Tab 按需拉取对应模块数据，杜绝首页启动直接轰炸后端签到与日志
+    if (activeTab === 'checkin') fetchCheckinStatus()
+    if (activeTab === 'logs') fetchLogs()
+    if (activeTab === 'register') fetchRegStatus()
+
     const si = setInterval(fetchStatus, 6000)
     const li = setInterval(() => { if (activeTab === 'logs') fetchLogs() }, 3000)
     const ri = setInterval(() => { if (activeTab === 'register' && regStatus?.running) fetchRegStatus() }, 2000)
-    const ci = setInterval(() => { if (activeTab === 'checkin') fetchCheckinStatus() }, 8000)
+    const ci = setInterval(() => { if (activeTab === 'checkin') fetchCheckinStatus() }, 15000)
     return () => { clearInterval(si); clearInterval(li); clearInterval(ri); clearInterval(ci) }
   }, [token, activeTab, fetchStatus, fetchAccounts, fetchApiConfig, fetchLogs, fetchRegStatus, fetchCheckinStatus, regStatus?.running])
 
@@ -1201,8 +1255,8 @@ export default function App() {
         <div className="pt-8 border-t border-hairline">
           <div className="flex items-center justify-between px-3 py-2.5">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${status.ready ? 'bg-mint animate-pulse' : 'bg-red-400'}`}></span>
-              <span className="text-xs font-semibold text-body">{status.ready ? t.common.healthy : t.common.offline}</span>
+              <span className={`w-2.5 h-2.5 rounded-full ${status.ready ? 'bg-mint animate-pulse' : (loading && accountsConfig.accounts.length === 0 ? 'bg-amber-400 animate-pulse' : 'bg-red-400')}`}></span>
+              <span className="text-xs font-semibold text-body">{status.ready ? t.common.healthy : (loading && accountsConfig.accounts.length === 0 ? (lang === 'zh' ? '同步中' : 'Syncing') : t.common.offline)}</span>
             </div>
             <button onClick={handleLogout} className="text-xs font-bold text-body hover:text-red-600 transition-colors">{t.common.signOut}</button>
           </div>
@@ -1234,10 +1288,33 @@ export default function App() {
             <div className="space-y-8">
               <section ref={statCardsRef} className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 {[
-                  { label: t.dashboard.serviceStatus, value: status.ready ? t.common.healthy : t.common.offline, detail: status.ready ? t.dashboard.allGatewaysActive : t.dashboard.noActiveSession, dot: status.ready ? 'bg-mint' : 'bg-red-400' },
-                  { label: t.dashboard.accountPool, value: String(status.accounts_count || 0), detail: t.dashboard.activeSessions },
-                  { label: t.dashboard.apiAuth, value: apiConfig.auth_required ? (lang === 'zh' ? '已开启' : 'Enabled') : (lang === 'zh' ? '未开启' : 'Disabled'), detail: apiConfig.auth_required ? `${apiConfig.allowed_keys.length} keys active` : t.dashboard.openAccess },
-                  { label: t.dashboard.activeUser, value: status.username || (lang === 'zh' ? '无' : 'None'), detail: status.user_type || 'N/A' }
+                  {
+                    label: t.dashboard.serviceStatus,
+                    value: status.ready
+                      ? t.common.healthy
+                      : (loading && accountsConfig.accounts.length === 0 ? (lang === 'zh' ? '同步中...' : 'Syncing...') : t.common.offline),
+                    detail: status.ready
+                      ? t.dashboard.allGatewaysActive
+                      : (loading && accountsConfig.accounts.length === 0 ? (lang === 'zh' ? '正在连接网关...' : 'Connecting...') : t.dashboard.noActiveSession),
+                    dot: status.ready
+                      ? 'bg-mint'
+                      : (loading && accountsConfig.accounts.length === 0 ? 'bg-amber-400 animate-pulse' : 'bg-red-400')
+                  },
+                  {
+                    label: t.dashboard.accountPool,
+                    value: String(status.accounts_count || accountsConfig.accounts.length || (loading ? '...' : 0)),
+                    detail: t.dashboard.activeSessions
+                  },
+                  {
+                    label: t.dashboard.apiAuth,
+                    value: apiConfig.auth_required ? (lang === 'zh' ? '已开启' : 'Enabled') : (lang === 'zh' ? '未开启' : 'Disabled'),
+                    detail: apiConfig.auth_required ? `${apiConfig.allowed_keys.length} keys active` : t.dashboard.openAccess
+                  },
+                  {
+                    label: t.dashboard.activeUser,
+                    value: status.username || (loading && accountsConfig.accounts.length === 0 ? '...' : (lang === 'zh' ? '无' : 'None')),
+                    detail: status.user_type || 'N/A'
+                  }
                 ].map((stat, i) => (
                   <div key={i} className="stat-card bg-surface-card border border-hairline p-6 rounded-xl hover:shadow-[0_4px_16px_rgba(0,0,0,0.04)] transition-all cursor-default">
                     <div className="text-[12px] font-semibold text-body mb-2 uppercase tracking-widest">{stat.label}</div>
@@ -1250,11 +1327,17 @@ export default function App() {
               <section className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
                 <div className="lg:col-span-2 glass-card p-8 rounded-2xl flex flex-col">
                   <div className="text-[12px] font-semibold text-body mb-2 uppercase tracking-widest">{t.dashboard.systemBriefing}</div>
-                  <div className="font-display-md text-ink mb-4 max-w-lg">{status.ready ? t.dashboard.readyBrief.replace('{count}', String(status.accounts_count)) : t.dashboard.notReadyBrief}</div>
+                  <div className="font-display-md text-ink mb-4 max-w-lg">
+                    {status.ready
+                      ? t.dashboard.readyBrief.replace('{count}', String(status.accounts_count || accountsConfig.accounts.length))
+                      : (loading && accountsConfig.accounts.length === 0
+                          ? (lang === 'zh' ? '正在同步云端网关会话，请稍候...' : 'Synchronizing cloud gateway session, please wait...')
+                          : t.dashboard.notReadyBrief)}
+                  </div>
                   <div className="mt-auto bg-ink/5 p-4 rounded-lg border border-hairline-strong" ref={terminalRef}>
                     <code className="text-sm font-mono text-ink">
                       <span className="text-primary font-bold">system@qodergate:~$</span> status --check --all<br />
-                      <span className="term-line opacity-70">Checking nodes... [{status.ready ? 'OK' : 'FAIL'}]<br /></span>
+                      <span className="term-line opacity-70">Checking nodes... [{status.ready ? 'OK' : (loading && accountsConfig.accounts.length === 0 ? 'SYNCING...' : 'FAIL')}]<br /></span>
                       <span className="term-line opacity-70">Validating certificates... [OK]<br /></span>
                       <span className="term-line opacity-70">Routing traffic to nearest node...</span><span className="cursor-blink">_</span>
                     </code>
