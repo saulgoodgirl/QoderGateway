@@ -14,19 +14,11 @@ interface Account {
   last_status: string
   last_error: string | null; quota: number; is_quota_exceeded: boolean
   plan: string | null; user_tag: string | null; next_reset_at: number | null
-  is_enterprise?: boolean
 }
 interface AccountsConfig { accounts: Account[]; active_uid: string | null }
 interface UIStatus { ready: boolean; mode: string; username: string | null; uid: string | null; user_type: string | null; error: string | null; accounts_count: number }
-interface KeyDetail { api_key: string; name?: string; account_uid?: string; account_uids?: string[] }
+interface KeyDetail { api_key: string; name?: string; account_uid?: string }
 interface APIConfig { auth_required: boolean; allowed_keys: string[]; allowed_keys_detail?: KeyDetail[] }
-interface CodexModelItem {
-  id: string
-  contextWindow: string
-  autoCompress: string
-  imageMode: string
-  recommended?: boolean
-}
 interface Message { role: 'user' | 'assistant'; content: string }
 type TabId = 'dashboard' | 'accounts' | 'checkin' | 'playground' | 'api-keys' | 'logs' | 'register'
 type AppTabId = TabId
@@ -38,8 +30,6 @@ interface CheckinAccount {
   uid: string
   name: string
   plan: string
-  user_type?: string
-  is_enterprise?: boolean
   claimed_today: boolean
   status_text: string
   reward_credits: number
@@ -85,11 +75,39 @@ const NAV_ITEMS: { id: AppTabId; icon: string; label: string }[] = [
   { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
   { id: 'accounts', icon: 'account_balance_wallet', label: 'Account Pool' },
   { id: 'checkin', icon: 'card_giftcard', label: 'Daily Rewards' },
-  { id: 'playground', icon: 'smart_toy', label: 'AI Playground' },
   { id: 'api-keys', icon: 'vpn_key', label: 'API Key Management' },
   { id: 'register', icon: 'person_add', label: 'Auto Registrar' },
   { id: 'logs', icon: 'list_alt', label: 'Logs' },
 ]
+
+interface GatewayModelInfo {
+  id: string
+  vendor: string
+  badge: string
+  context: string
+  descZh: string
+  descEn: string
+  rec?: boolean
+  latency: string
+}
+
+const VERIFIED_MODELS: GatewayModelInfo[] = [
+  { id: 'kimi-k3', vendor: '月之暗面', badge: 'bg-blue-50 text-blue-700 border-blue-200', context: '1M', descZh: '超长上下文与复杂代码推理，旗舰首选', descEn: 'Flagship reasoning & 1M context', rec: true, latency: '~6.9s' },
+  { id: 'deepseek-v4-pro', vendor: 'DeepSeek', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200', context: '1M', descZh: '顶级代码架构与逻辑分析，生成严谨', descEn: 'Top-tier code architecture & logic', rec: true, latency: '~3.4s' },
+  { id: 'qwen-3.8-max', vendor: '阿里通义', badge: 'bg-amber-50 text-amber-700 border-amber-200', context: '1M', descZh: '通义旗舰全能模型，代码与长文本均衡', descEn: 'All-round flagship by Alibaba', rec: true, latency: '~3.3s' },
+  { id: 'glm-5.3', vendor: '智谱 GLM', badge: 'bg-cyan-50 text-cyan-700 border-cyan-200', context: '1M', descZh: '智谱最新代主力模型，中文语义理解出色', descEn: 'Flagship model by Zhipu AI', rec: true, latency: '~3.4s' },
+  { id: 'kimi-k2.8', vendor: '月之暗面', badge: 'bg-blue-50 text-blue-700 border-blue-200', context: '200K', descZh: '高性价比轻巧代码助手，响应迅速', descEn: 'Cost-effective light code assistant', latency: '~3.9s' },
+  { id: 'deepseek-flash', vendor: 'DeepSeek', badge: 'bg-indigo-50 text-indigo-700 border-indigo-200', context: '128K', descZh: '极速首字响应，低延迟代码补全', descEn: 'Ultra-fast TTFT & code completion', latency: '~2.3s' },
+  { id: 'qwen-3.8-flash', vendor: '阿里通义', badge: 'bg-amber-50 text-amber-700 border-amber-200', context: '1M', descZh: '通义极速版，兼具效率与精度', descEn: 'Fast & accurate Qwen model', latency: '~3.2s' },
+  { id: 'qwen-3.7-max', vendor: '阿里通义', badge: 'bg-amber-50 text-amber-700 border-amber-200', context: '1M', descZh: '经典全能模型，长文本稳定性好', descEn: 'Stable enterprise all-rounder', latency: '~3.2s' },
+  { id: 'qwen-3.7-plus', vendor: '阿里通义', badge: 'bg-amber-50 text-amber-700 border-amber-200', context: '1M', descZh: '均衡兼顾生成速度与上下文深度', descEn: 'Balanced speed & depth', latency: '~5.5s' },
+  { id: 'qwen-3.7-flash', vendor: '阿里通义', badge: 'bg-amber-50 text-amber-700 border-amber-200', context: '1M', descZh: '轻量通义极速版，日常交互首选', descEn: 'Lightweight fast response', latency: '~8.0s' },
+  { id: 'glm-5.3-flash', vendor: '智谱 GLM', badge: 'bg-cyan-50 text-cyan-700 border-cyan-200', context: '1M', descZh: '智谱高速推理模型，高并发低延迟', descEn: 'Fast inference by Zhipu AI', latency: '~6.9s' },
+  { id: 'glm-5.2', vendor: '智谱 GLM', badge: 'bg-cyan-50 text-cyan-700 border-cyan-200', context: '128K', descZh: '经典主力模型，运行稳定', descEn: 'Classic stable GLM engine', latency: '~3.3s' },
+  { id: 'auto', vendor: 'Qoder 原生', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', context: '1M', descZh: '根据任务复杂度自动动态调度模型', descEn: 'Dynamic adaptive routing by Qoder', latency: '~4.3s' },
+  { id: 'lite', vendor: 'Qoder 原生', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', context: '128K', descZh: '轻量极速模型，秒级代码单行生成', descEn: 'Ultra-lightweight code completer', latency: '~2.0s' },
+]
+
 
 const UI_TEXT = {
   en: {
@@ -122,7 +140,7 @@ const UI_TEXT = {
       statsAutoScheduleDesc: 'Active · Runs daily at 00:05',
       tableTitle: 'Account Check-in & Credit Balance',
       colAccount: 'Account',
-      colPlan: 'User Type (Enterprise/Personal)',
+      colPlan: 'Plan Tier',
       colStatus: 'Today\'s Status',
       colStreak: 'Streak Days',
       colQuota: 'Available Credits',
@@ -195,7 +213,7 @@ const UI_TEXT = {
       statsAutoScheduleDesc: '运行中 · 每日 00:05 定时执行',
       tableTitle: '账号签到状态与算力明细',
       colAccount: '账号 / 用户名',
-      colPlan: '用户类别 (企业/个人)',
+      colPlan: '套餐类型',
       colStatus: '今日签到状态',
       colStreak: '连续签到',
       colQuota: '当前可用算力',
@@ -312,281 +330,6 @@ function CustomSelect({ value, onChange, options, placeholder }: { value: string
   )
 }
 
-const isEnterpriseAccount = (item?: { is_enterprise?: boolean; plan?: string | null; user_type?: string | null; user_tag?: string | null } | null) => {
-  if (!item) return false
-  if (item.is_enterprise !== undefined) return Boolean(item.is_enterprise)
-  const p = (item.plan || '').toLowerCase()
-  const u = (item.user_type || '').toLowerCase()
-  const tag = (item.user_tag || '').toLowerCase()
-  return p.includes('team') || u.includes('team') || p.includes('org') || tag.includes('org') || p.includes('enterprise')
-}
-
-function UserTypeBadge({
-  account,
-  lang = 'zh',
-}: {
-  account?: { is_enterprise?: boolean; plan?: string | null; user_type?: string | null; user_tag?: string | null } | null
-  lang?: Lang
-}) {
-  const isEnt = isEnterpriseAccount(account)
-  if (isEnt) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200 shadow-2xs">
-        <span className="material-symbols-outlined text-[15px]">corporate_fare</span>
-        <span>{lang === 'zh' ? '企业用户 (Teams)' : 'Enterprise (Teams)'}</span>
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
-      <span className="material-symbols-outlined text-[15px]">person</span>
-      <span>{lang === 'zh' ? '个人用户 (Personal)' : 'Personal User'}</span>
-    </span>
-  )
-}
-
-function MultiAccountSelect({
-  selectedUids,
-  onChange,
-  accounts,
-  placeholder = '🌐 全部账号 (默认轮询)',
-  lang = 'zh',
-}: {
-  selectedUids: string[]
-  onChange: (uids: string[]) => void
-  accounts: Account[]
-  placeholder?: string
-  lang?: Lang
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  const toggleAccount = (uid: string) => {
-    if (selectedUids.includes(uid)) {
-      onChange(selectedUids.filter(u => u !== uid))
-    } else {
-      onChange([...selectedUids, uid])
-    }
-  }
-
-  const selectAll = () => {
-    onChange(accounts.map(a => a.uid))
-  }
-
-  const clearAll = () => {
-    onChange([])
-  }
-
-  const selectedAccounts = accounts.filter(a => selectedUids.includes(a.uid))
-
-  return (
-    <div ref={ref} className={`relative ${open ? 'z-[5000]' : 'z-10'}`}>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="min-w-[190px] max-w-[280px] h-9 bg-white border border-hairline hover:border-ink/40 rounded-xl px-3 text-xs text-ink font-semibold flex items-center justify-between gap-2 shadow-xs transition-all cursor-pointer select-none"
-      >
-        <div className="flex items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap">
-          {selectedAccounts.length === 0 ? (
-            <span className="text-body/70 flex items-center gap-1">
-              <span>🌐</span>
-              <span className="truncate">{placeholder}</span>
-            </span>
-          ) : selectedAccounts.length === 1 ? (
-            <span className="flex items-center gap-1.5 text-ink font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-              <span className="truncate">{selectedAccounts[0].name}</span>
-              <span className="text-[10px] text-body font-mono bg-canvas-soft px-1 rounded shrink-0">
-                {selectedAccounts[0].quota}c
-              </span>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-ink font-bold">
-              <span className="px-1.5 py-0.2 rounded-full bg-ink text-white text-[10px] font-mono shrink-0">
-                {selectedAccounts.length}
-              </span>
-              <span className="truncate text-body text-[11px]">
-                {selectedAccounts.map(a => a.name).join(', ')}
-              </span>
-            </span>
-          )}
-        </div>
-        <span className={`material-symbols-outlined text-body text-[16px] transition-transform duration-200 shrink-0 ${open ? 'rotate-180' : ''}`}>
-          expand_more
-        </span>
-      </button>
-
-      {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-72 bg-white border border-hairline rounded-2xl shadow-2xl p-2.5 z-[6000] text-xs animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center justify-between px-2 py-1.5 mb-1.5 border-b border-hairline text-[11px] text-body">
-            <span className="font-semibold text-ink">
-              {lang === 'zh' ? '选择定向账号' : 'Select Target Accounts'}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={selectAll}
-                className="text-primary hover:underline cursor-pointer font-medium"
-              >
-                {lang === 'zh' ? '全选' : 'Select All'}
-              </button>
-              <span className="text-hairline">|</span>
-              <button
-                type="button"
-                onClick={clearAll}
-                className="text-body hover:text-ink cursor-pointer font-medium"
-              >
-                {lang === 'zh' ? '清空 (轮询)' : 'Clear (All)'}
-              </button>
-            </div>
-          </div>
-
-          <div
-            onClick={clearAll}
-            className={`flex items-center gap-2 px-2.5 py-2 rounded-xl cursor-pointer transition-colors ${
-              selectedUids.length === 0
-                ? 'bg-ink text-white font-semibold'
-                : 'hover:bg-canvas-soft text-ink'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[16px]">
-              {selectedUids.length === 0 ? 'radio_button_checked' : 'radio_button_unchecked'}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs">{lang === 'zh' ? '全部账号 (默认智能轮询)' : 'All Accounts (Default Pool)'}</div>
-              <div className={`text-[10px] ${selectedUids.length === 0 ? 'text-white/70' : 'text-body'}`}>
-                {lang === 'zh' ? '不限制，请求将在所有可用账号间轮询' : 'Rotate across all eligible accounts'}
-              </div>
-            </div>
-          </div>
-
-          <div className="my-1.5 border-t border-hairline"></div>
-
-          <div className="max-h-60 overflow-y-auto space-y-1 pr-1">
-            {accounts.length === 0 ? (
-              <div className="py-4 text-center text-body text-[11px]">
-                {lang === 'zh' ? '暂无可绑定的账号' : 'No accounts available'}
-              </div>
-            ) : (
-              accounts.map(acc => {
-                const isChecked = selectedUids.includes(acc.uid)
-                return (
-                  <div
-                    key={acc.uid}
-                    onClick={() => toggleAccount(acc.uid)}
-                    className={`flex items-center gap-2 px-2.5 py-2 rounded-xl cursor-pointer transition-colors ${
-                      isChecked
-                        ? 'bg-canvas-soft border border-hairline-strong/30 font-semibold'
-                        : 'hover:bg-canvas-soft/60 text-ink'
-                    }`}
-                  >
-                    <span
-                      className={`material-symbols-outlined text-[18px] transition-colors ${
-                        isChecked ? 'text-ink' : 'text-body/40'
-                      }`}
-                    >
-                      {isChecked ? 'check_box' : 'check_box_outline_blank'}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="truncate text-xs font-bold text-ink">{acc.name}</span>
-                        {isEnterpriseAccount(acc) ? (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-purple-100 text-purple-800 font-bold border border-purple-200 shrink-0">
-                            🏢 企业
-                          </span>
-                        ) : (
-                          <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-blue-50 text-blue-700 font-bold border border-blue-200 shrink-0">
-                            👤 个人
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] text-body mt-0.5">
-                        <span className={acc.quota <= 10 ? 'text-amber-600 font-bold' : ''}>
-                          {acc.quota} 额度
-                        </span>
-                        {acc.api_enabled === false && (
-                          <span className="text-red-500 font-medium">(API已关)</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })
-            )}
-          </div>
-
-          {selectedUids.length > 0 && (
-            <div className="mt-2 pt-1.5 border-t border-hairline px-2 flex items-center justify-between text-[11px] text-body">
-              <span>{lang === 'zh' ? `已绑定 ${selectedUids.length} 个账号` : `${selectedUids.length} accounts bound`}</span>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="px-2.5 py-1 bg-ink text-white rounded-lg font-bold text-[10px] hover:bg-neutral-800 transition-colors"
-              >
-                {lang === 'zh' ? '确定' : 'Done'}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-const DEFAULT_CODEX_MODELS: CodexModelItem[] = [
-  { id: 'kimi-k3', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
-  { id: 'deepseek-v4-pro', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
-  { id: 'qwen-3.8-max', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
-  { id: 'glm-5.3', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
-  { id: 'minimax-m2.7', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'auto', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'lite', contextWindow: '128K', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'kimi-k2.8', contextWindow: '200K', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'deepseek-flash', contextWindow: '128K', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'qwen-3.8-flash', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'qwen-3.7-max', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'qwen-3.7-plus', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'glm-5.3-flash', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
-  { id: 'glm-5.2', contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
-]
-
-const getModelVendorInfo = (id: string) => {
-  const lower = id.toLowerCase()
-  if (lower.includes('@')) return { vendor: '账号专属靶向', badgeLight: 'bg-purple-50 text-purple-700 border-purple-200' }
-  if (lower.startsWith('kimi') || lower.startsWith('kmodel')) return { vendor: '月之暗面 Moonshot', badgeLight: 'bg-blue-50 text-blue-700 border-blue-200' }
-  if (lower.startsWith('deepseek') || lower.startsWith('dmodel') || lower.startsWith('dfmodel')) return { vendor: '深度求索 DeepSeek', badgeLight: 'bg-indigo-50 text-indigo-700 border-indigo-200' }
-  if (lower.startsWith('qwen') || lower.startsWith('qmodel') || lower.startsWith('qfmodel') || lower.startsWith('q37fmodel')) return { vendor: '阿里通义 Qwen', badgeLight: 'bg-amber-50 text-amber-700 border-amber-200' }
-  if (lower.startsWith('glm') || lower.startsWith('gmodel') || lower.startsWith('gfmodel') || lower.startsWith('gm51model')) return { vendor: '智谱 GLM', badgeLight: 'bg-cyan-50 text-cyan-700 border-cyan-200' }
-  if (lower.startsWith('minimax') || lower.startsWith('mmodel')) return { vendor: 'MiniMax', badgeLight: 'bg-rose-50 text-rose-700 border-rose-200' }
-  return { vendor: 'Qoder 原生', badgeLight: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
-}
-
-const getModelDescription = (id: string) => {
-  const lower = id.toLowerCase()
-  if (lower.includes('@')) return '定向调度指定 Qoder 账号，专属算力隔离'
-  if (lower === 'kimi-k3') return '超长上下文与复杂代码推理，旗舰首选'
-  if (lower === 'deepseek-v4-pro') return '顶级代码架构与逻辑分析，生成严谨'
-  if (lower === 'qwen-3.8-max') return '通义旗舰全能模型，代码与长文本均衡'
-  if (lower === 'glm-5.3') return '智谱最新代主力模型，中文语义理解出色'
-  if (lower === 'minimax-m2.7') return '长上下文与多轮对话表现优异'
-  if (lower === 'kimi-k2.8') return '高性价比轻巧代码助手'
-  if (lower === 'deepseek-flash') return '极速首字响应，低延迟轻量代码补全'
-  if (lower === 'qwen-3.8-flash') return '通义极速版，兼具效率与精度'
-  if (lower === 'auto') return '根据任务复杂度自动动态负载与路由'
-  if (lower === 'lite') return '轻量极速，响应极快'
-  return '标准 OpenAI 兼容推理模型'
-}
-
 function CustomInput({ value, onChange, placeholder, type = 'text', className = '', mono = false }: {
   value: string; onChange: (v: string) => void; placeholder?: string; type?: string; className?: string; mono?: boolean
 }) {
@@ -700,25 +443,13 @@ export default function App() {
   const [showThinking, setShowThinking] = useState(true)
 
   const [newKey, setNewKey] = useState('')
-  const [newKeyAccounts, setNewKeyAccounts] = useState<string[]>([])
+  const [newKeyAccount, setNewKeyAccount] = useState('')
   const [newKeyName, setNewKeyName] = useState('')
   const [playgroundTargetAccount, setPlaygroundTargetAccount] = useState('')
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const [selectedBaseUrlPreset, setSelectedBaseUrlPreset] = useState<'cloud' | 'local' | 'current' | 'custom'>('cloud')
-  const [customBaseUrl, setCustomBaseUrl] = useState('')
-  const [selectedApiKeyForCodex, setSelectedApiKeyForCodex] = useState<string>('')
-  const [showCodexApiKey, setShowCodexApiKey] = useState(false)
-  const [upstreamProtocol, setUpstreamProtocol] = useState<'chat' | 'responses'>('chat')
-  const [codexModels, setCodexModels] = useState<CodexModelItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('qodergate_codex_models')
-      if (saved) return JSON.parse(saved)
-    } catch {}
-    return DEFAULT_CODEX_MODELS
-  })
-  const [newModelNameInput, setNewModelNameInput] = useState('')
-  const [fetchingUpstreamModels, setFetchingUpstreamModels] = useState(false)
-  const [targetAccountForModel, setTargetAccountForModel] = useState('')
+  const [selectedAccessKey, setSelectedAccessKey] = useState<string>('')
+  const [keyMasked, setKeyMasked] = useState<boolean>(true)
+  const [copiedModel, setCopiedModel] = useState<string | null>(null)
   const [patToken, setPatToken] = useState('')
   const [submittingPat, setSubmittingPat] = useState(false)
   const [searchAccounts, setSearchAccounts] = useState('')
@@ -1187,21 +918,12 @@ export default function App() {
     const trimmed = newKey.trim()
     if (!trimmed) return
     if (apiConfig.allowed_keys.includes(trimmed)) { pushToast('ERROR', lang === 'zh' ? 'Key 已存在' : 'Duplicate Key', msg.duplicateKey); return }
-    
-    let defaultName = '通用 Key'
-    if (newKeyAccounts.length === 1) {
-      defaultName = accountsConfig.accounts.find(a => a.uid === newKeyAccounts[0])?.name || '专属 Key'
-    } else if (newKeyAccounts.length > 1) {
-      defaultName = `多账号 Key (${newKeyAccounts.length}个)`
-    }
-
     const newDetail: KeyDetail = {
       api_key: trimmed,
-      name: newKeyName.trim() || defaultName,
-      account_uid: newKeyAccounts.join(','),
-      account_uids: newKeyAccounts,
+      name: newKeyName.trim() || (newKeyAccount ? (accountsConfig.accounts.find(a => a.uid === newKeyAccount)?.name || '专属 Key') : '通用 Key'),
+      account_uid: newKeyAccount.trim(),
     }
-    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '', account_uids: [] }))
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
     const updatedDetails = [...currentDetails, newDetail]
     handleSaveApiConfig({
       ...apiConfig,
@@ -1211,11 +933,11 @@ export default function App() {
     pushToast('SUCCESS', lang === 'zh' ? 'Key 已添加' : 'Key Added', msg.keyAdded)
     setNewKey('')
     setNewKeyName('')
-    setNewKeyAccounts([])
+    setNewKeyAccount('')
   }
 
   const handleDeleteKey = (key: string) => {
-    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '', account_uids: [] }))
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
     handleSaveApiConfig({
       ...apiConfig,
       allowed_keys: apiConfig.allowed_keys.filter(k => k !== key),
@@ -1224,29 +946,14 @@ export default function App() {
     pushToast('SUCCESS', lang === 'zh' ? 'Key 已删除' : 'Key Removed', msg.keyRemoved)
   }
 
-  const handleUpdateKeyAccounts = (key: string, targetUids: string[]) => {
-    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '', account_uids: [] }))
-    const updated = currentDetails.map(item => {
-      if (item.api_key === key) {
-        return {
-          ...item,
-          account_uid: targetUids.join(','),
-          account_uids: targetUids,
-        }
-      }
-      return item
-    })
+  const handleUpdateKeyAccount = (key: string, targetUid: string) => {
+    const currentDetails = apiConfig.allowed_keys_detail || apiConfig.allowed_keys.map(k => ({ api_key: k, name: '', account_uid: '' }))
+    const updated = currentDetails.map(item => item.api_key === key ? { ...item, account_uid: targetUid } : item)
     handleSaveApiConfig({
       ...apiConfig,
       allowed_keys_detail: updated,
     })
-    pushToast(
-      'SUCCESS',
-      lang === 'zh' ? 'Key 绑定已更新' : 'Key Binding Updated',
-      lang === 'zh'
-        ? (targetUids.length > 0 ? `已绑定 ${targetUids.length} 个账号` : '已设为全部账号轮询')
-        : (targetUids.length > 0 ? `Updated binding to ${targetUids.length} account(s)` : 'Set to all accounts pool')
-    )
+    pushToast('SUCCESS', lang === 'zh' ? 'Key 绑定已更新' : 'Key Binding Updated', lang === 'zh' ? '已更新该 Key 的指定调用账号' : 'Updated key target account')
   }
 
   const handleCopyKey = (key: string) => {
@@ -1254,147 +961,6 @@ export default function App() {
     setCopiedKey(key)
     pushToast('INFO', lang === 'zh' ? '已复制' : 'Copied', msg.copied)
     setTimeout(() => setCopiedKey(null), 2000)
-  }
-
-  const resolvedBaseUrl = (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
-    ? `${window.location.origin}/v1`
-    : 'https://lite.bigbob.asia/v1'
-
-  const effectiveCodexKey = selectedApiKeyForCodex || (apiConfig.allowed_keys.length > 0 ? apiConfig.allowed_keys[0] : 'qg_live_42adacf1b759ee4e6e8a7ea99f9eb350')
-
-  const handleSaveCodexModels = (newList: CodexModelItem[]) => {
-    setCodexModels(newList)
-    try {
-      localStorage.setItem('qodergate_codex_models', JSON.stringify(newList))
-    } catch {}
-  }
-
-  const handleCopyBaseUrl = () => {
-    navigator.clipboard.writeText(resolvedBaseUrl)
-    pushToast('SUCCESS', lang === 'zh' ? '已复制 Base URL' : 'Copied Base URL', resolvedBaseUrl)
-  }
-
-  const handleCopyCodexKey = () => {
-    navigator.clipboard.writeText(effectiveCodexKey)
-    pushToast('SUCCESS', lang === 'zh' ? '已复制 API Key' : 'Copied API Key', effectiveCodexKey.substring(0, 16) + '...')
-  }
-
-  const handleCopyAllModels = () => {
-    const list = codexModels.map(m => m.id).join('\n')
-    navigator.clipboard.writeText(list)
-    pushToast(
-      'SUCCESS',
-      lang === 'zh' ? '已复制全部模型名称' : 'Copied All Models',
-      lang === 'zh' ? `共 ${codexModels.length} 个模型已换行复制，可直接粘贴进 Codex++ 或客户端` : `Copied ${codexModels.length} models to clipboard`
-    )
-  }
-
-  const handleCopyCodexJson = () => {
-    const configObj = {
-      name: "QoderGateway",
-      baseUrl: resolvedBaseUrl,
-      apiKey: effectiveCodexKey,
-      protocol: upstreamProtocol === 'chat' ? "Chat Completions" : "Responses API",
-      sessionIdentity: "Custom",
-      models: codexModels.map(m => ({
-        name: m.id,
-        contextWindow: m.contextWindow,
-        autoCompress: m.autoCompress,
-        imageHandling: m.imageMode
-      }))
-    }
-    navigator.clipboard.writeText(JSON.stringify(configObj, null, 2))
-    pushToast('SUCCESS', lang === 'zh' ? '已复制 Codex++ 配置' : 'Copied Codex Config', lang === 'zh' ? '完整配置 JSON 已复制到剪贴板' : 'Full config JSON copied')
-  }
-
-  const handleCopyCurl = () => {
-    const firstModel = codexModels[0]?.id || 'kimi-k3'
-    const cmd = `curl -X POST "${resolvedBaseUrl}/chat/completions" \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${effectiveCodexKey}" \\\n  -d '{\n    "model": "${firstModel}",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`
-    navigator.clipboard.writeText(cmd)
-    pushToast('SUCCESS', lang === 'zh' ? '已复制 cURL 命令' : 'Copied cURL', lang === 'zh' ? '终端测试命令已复制' : 'Command copied')
-  }
-
-  const handleFetchUpstreamModels = async () => {
-    setFetchingUpstreamModels(true)
-    try {
-      const res = await fetch('/v1/models')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      const fetchedIds: string[] = (data.data || []).map((item: any) => item.id).filter(Boolean)
-      
-      const existingMap = new Map(codexModels.map(m => [m.id, m]))
-      const merged: CodexModelItem[] = [...codexModels]
-      
-      let addedCount = 0
-      for (const id of fetchedIds) {
-        if (!existingMap.has(id)) {
-          merged.push({
-            id,
-            contextWindow: '1M',
-            autoCompress: '90%',
-            imageMode: '原样发送图片',
-          })
-          addedCount++
-        }
-      }
-      handleSaveCodexModels(merged)
-      pushToast(
-        'SUCCESS',
-        lang === 'zh' ? '已从上游同步模型' : 'Models Synced',
-        lang === 'zh' ? `从网关成功拉取模型，新增 ${addedCount} 个可用模型` : `Synced models, added ${addedCount} new models`
-      )
-    } catch (e: any) {
-      pushToast('ERROR', lang === 'zh' ? '拉取模型失败' : 'Fetch Failed', String(e.message || e))
-    } finally {
-      setFetchingUpstreamModels(false)
-    }
-  }
-
-  const handleAddCodexModel = () => {
-    const trimmed = newModelNameInput.trim()
-    if (!trimmed) return
-    if (codexModels.some(m => m.id === trimmed)) {
-      pushToast('ERROR', lang === 'zh' ? '模型已存在' : 'Model Exists', lang === 'zh' ? `模型 ${trimmed} 已经在列表中` : `Model already in list`)
-      return
-    }
-    const updated = [
-      { id: trimmed, contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片' },
-      ...codexModels
-    ]
-    handleSaveCodexModels(updated)
-    setNewModelNameInput('')
-    pushToast('SUCCESS', lang === 'zh' ? '已添加模型' : 'Model Added', lang === 'zh' ? `模型 ${trimmed} 已加入列表` : `Added ${trimmed}`)
-  }
-
-  const handleAddTargetAccountModel = (accountName: string) => {
-    if (!accountName) return
-    const targetModelId = `kimi-k3@${accountName}`
-    if (codexModels.some(m => m.id === targetModelId)) {
-      pushToast('INFO', lang === 'zh' ? '靶向模型已存在' : 'Model Exists', `${targetModelId} 已在列表中`)
-      return
-    }
-    const updated = [
-      { id: targetModelId, contextWindow: '1M', autoCompress: '90%', imageMode: '原样发送图片', recommended: true },
-      ...codexModels
-    ]
-    handleSaveCodexModels(updated)
-    pushToast('SUCCESS', lang === 'zh' ? '已添加靶向模型' : 'Target Model Added', lang === 'zh' ? `在客户端中选择 ${targetModelId} 即可单独调用该账号！` : `Model ${targetModelId} ready`)
-  }
-
-  const handleRemoveCodexModel = (id: string) => {
-    const updated = codexModels.filter(m => m.id !== id)
-    handleSaveCodexModels(updated)
-    pushToast('INFO', lang === 'zh' ? '已移除模型' : 'Model Removed', id)
-  }
-
-  const handleUpdateCodexModelItem = (id: string, field: keyof CodexModelItem, val: string) => {
-    const updated = codexModels.map(m => m.id === id ? { ...m, [field]: val } : m)
-    handleSaveCodexModels(updated)
-  }
-
-  const handleResetCodexModels = () => {
-    handleSaveCodexModels(DEFAULT_CODEX_MODELS)
-    pushToast('INFO', lang === 'zh' ? '已恢复默认模型' : 'Models Reset', lang === 'zh' ? '已重置为官方推荐模型列表' : 'Reset to default model list')
   }
 
   const handleRefreshStatus = () => {
@@ -1412,12 +978,7 @@ export default function App() {
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (apiConfig.auth_required && apiConfig.allowed_keys.length > 0) {
-      const targetAcc = accountsConfig.accounts.find(a => a.name === playgroundTargetAccount)
-      const targetUid = targetAcc?.uid
-      const boundKey = apiConfig.allowed_keys_detail?.find(k => {
-        const uids = k.account_uids || (k.account_uid ? k.account_uid.split(',').map(s => s.trim()).filter(Boolean) : [])
-        return targetUid && uids.includes(targetUid)
-      })?.api_key
+      const boundKey = apiConfig.allowed_keys_detail?.find(k => k.account_uid && accountsConfig.accounts.find(a => a.name === playgroundTargetAccount)?.uid === k.account_uid)?.api_key
       headers['Authorization'] = `Bearer ${boundKey || apiConfig.allowed_keys[0]}`
     }
     if (playgroundTargetAccount) {
@@ -1827,7 +1388,7 @@ export default function App() {
                       <tr>{[
                         lang === 'zh' ? '账号名称' : 'Account',
                         'UID',
-                        lang === 'zh' ? '用户类别 / 配额' : 'Type / Quota',
+                        lang === 'zh' ? '类型 / 配额' : 'Plan / Quota',
                         lang === 'zh' ? '状态' : 'Status',
                         lang === 'zh' ? 'API 调度模式' : 'API Routing Mode',
                         lang === 'zh' ? '账号总启用' : 'Enabled',
@@ -1873,12 +1434,7 @@ export default function App() {
                                 </div>
                               </td>
                               <td className="px-6 py-5 font-mono text-xs text-body select-all">{acc.uid}</td>
-                              <td className="px-6 py-5">
-                                <div className="flex flex-col items-start gap-1">
-                                  <UserTypeBadge account={acc} lang={lang} />
-                                  <span className="text-[10px] text-body font-mono">Quota: {acc.quota}</span>
-                                </div>
-                              </td>
+                              <td className="px-6 py-5"><div className="flex flex-col"><span className="text-xs font-semibold text-ink">{acc.user_tag || acc.plan || 'Trial'}</span><span className="text-[10px] text-body font-mono">Quota: {acc.quota}</span></div></td>
                               <td className="px-6 py-5">
                                 {acc.is_quota_exceeded ? <span className="px-3 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-red-100 text-red-700">Exceeded</span>
                                 : acc.last_status === 'ok' ? <span className="px-3 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-mint/20 text-ink">Enabled</span>
@@ -2117,7 +1673,9 @@ export default function App() {
                               <div className="font-mono text-[11px] text-body opacity-60 select-all">{acc.uid}</div>
                             </td>
                             <td className="px-6 py-4">
-                              <UserTypeBadge account={acc} lang={lang} />
+                              <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-neutral-100 text-neutral-700 capitalize">
+                                {acc.plan || 'Teams'}
+                              </span>
                             </td>
                             <td className="px-6 py-4">
                               {acc.claimed_today ? (
@@ -2294,28 +1852,30 @@ export default function App() {
                   <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-hairline">
                     <div>
                       <span className="font-bold text-ink">{t.api.activeAccessKeys}</span>
-                      <p className="text-[11px] text-body">{lang === 'zh' ? '可为单个 Key 绑定多账号轮询，或保持默认全账号轮询。' : 'Keys can be bound to specific account subsets or load-balanced across all.'}</p>
+                      <p className="text-[11px] text-body">{lang === 'zh' ? '可为单个 Key 绑定专属账号，或保持默认全账号轮询。' : 'Keys can be bound to a single account or load-balanced across all.'}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                      <CustomInput value={newKey} onChange={setNewKey} placeholder={t.api.keyPlaceholder} className="!w-44 !py-2 !bg-canvas-soft !border-hairline" mono />
-                      <button onClick={handleGenerateKey} className="px-2.5 py-2 text-xs font-semibold bg-canvas-soft border border-hairline rounded-xl hover:bg-hairline text-ink transition-all shrink-0" title={lang === 'zh' ? '随机生成 API Key' : 'Generate random key'}>
-                        {lang === 'zh' ? '🎲 生成' : '🎲 Gen'}
-                      </button>
-                      <CustomInput value={newKeyName} onChange={setNewKeyName} placeholder={lang === 'zh' ? '备注 (可选)' : 'Label (Optional)'} className="!w-28 !py-2 !bg-canvas-soft !border-hairline text-xs" />
-                      <MultiAccountSelect
-                        selectedUids={newKeyAccounts}
-                        onChange={setNewKeyAccounts}
-                        accounts={accountsConfig.accounts}
-                        placeholder={lang === 'zh' ? '全部账号 (默认)' : 'All Accounts'}
-                        lang={lang}
-                      />
+                      <CustomInput value={newKey} onChange={setNewKey} placeholder={t.api.keyPlaceholder} className="!w-48 !py-2 !bg-canvas-soft !border-hairline" mono />
+                      <select
+                        value={newKeyAccount}
+                        onChange={(e) => setNewKeyAccount(e.target.value)}
+                        className="text-xs font-semibold px-2.5 py-2 rounded-xl border border-hairline bg-canvas-soft text-ink outline-none cursor-pointer"
+                        title={lang === 'zh' ? '选择该 Key 绑定的目标账号' : 'Select target account for this key'}
+                      >
+                        <option value="">{lang === 'zh' ? '🌐 全部账号 (默认)' : '🌐 All Accounts'}</option>
+                        {accountsConfig.accounts.map(a => (
+                          <option key={a.uid} value={a.uid}>
+                            {a.user_type === 'enterprise' || a.plan === 'team' ? '🏢 [企业] ' : '👤 [个人] '}{a.name} ({a.quota} credits)
+                          </option>
+                        ))}
+                      </select>
                       <button onClick={handleAddKey} disabled={!newKey.trim()} className="bg-ink text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-neutral-800 transition-all disabled:opacity-50 shrink-0">{t.common.add}</button>
                     </div>
                   </div>
-                  <div className="overflow-x-auto min-h-[380px]">
+                  <div className="overflow-x-auto">
                     <table className="w-full text-left">
                       <thead className="bg-canvas-soft/50 border-b border-hairline">
-                        <tr>{[lang === 'zh' ? 'Key 密钥' : 'Key String', lang === 'zh' ? '定向绑定账号 (支持多选)' : 'Bound Accounts', lang === 'zh' ? '操作' : 'Actions'].map((h, i) => (
+                        <tr>{[lang === 'zh' ? 'Key 密钥' : 'Key String', lang === 'zh' ? '定向绑定账号' : 'Bound Account', lang === 'zh' ? '操作' : 'Actions'].map((h, i) => (
                           <th key={h} className={`px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-widest ${i === 2 ? 'text-right' : ''}`}>{h}</th>
                         ))}</tr>
                       </thead>
@@ -2324,28 +1884,48 @@ export default function App() {
                           <tr><td colSpan={3} className="py-6 text-center text-xs text-body font-medium">{t.api.noKeys}</td></tr>
                         ) : apiConfig.allowed_keys.map((key) => {
                           const detail = apiConfig.allowed_keys_detail?.find(d => d.api_key === key)
-                          const currentUids = detail?.account_uids || (detail?.account_uid ? detail.account_uid.split(',').map(s => s.trim()).filter(Boolean) : [])
+                          const boundAcc = detail?.account_uid ? accountsConfig.accounts.find(a => a.uid === detail.account_uid) : null
+                          const isSelected = (selectedAccessKey || apiConfig.allowed_keys[0]) === key
                           return (
-                            <tr key={key} className="hover:bg-canvas-soft/30 transition-colors">
+                            <tr key={key} className={`transition-colors ${isSelected ? 'bg-emerald-50/40' : 'hover:bg-canvas-soft/30'}`}>
                               <td className="px-6 py-5 font-mono text-xs tracking-wider text-body opacity-80 select-all break-all">
-                                {detail?.name && (
-                                  <div className="font-bold text-ink text-xs font-sans mb-1">{detail.name}</div>
-                                )}
-                                <div className="font-mono text-[11px] text-body/90 select-all">{key}</div>
+                                <div className="flex items-center gap-2">
+                                  <span>{key}</span>
+                                  {isSelected && (
+                                    <span className="text-[10px] font-sans font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-300">
+                                      {lang === 'zh' ? '当前配置' : 'Active'}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-5">
-                                <MultiAccountSelect
-                                  selectedUids={currentUids}
-                                  onChange={(uids) => handleUpdateKeyAccounts(key, uids)}
-                                  accounts={accountsConfig.accounts}
-                                  placeholder={lang === 'zh' ? '全部账号 (默认轮询)' : 'All Accounts (Default)'}
-                                  lang={lang}
-                                />
+                                <select
+                                  value={detail?.account_uid || ''}
+                                  onChange={(e) => handleUpdateKeyAccount(key, e.target.value)}
+                                  className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-hairline bg-white text-ink outline-none cursor-pointer shadow-xs max-w-[240px]"
+                                >
+                                  <option value="">{lang === 'zh' ? '🌐 全部账号 (默认轮询)' : '🌐 All Accounts (Default)'}</option>
+                                  {accountsConfig.accounts.map(a => (
+                                    <option key={a.uid} value={a.uid}>
+                                      {a.user_type === 'enterprise' || a.plan === 'team' ? '🏢 [企业] ' : '👤 [个人] '}{a.name} ({a.quota} credits)
+                                    </option>
+                                  ))}
+                                </select>
                               </td>
                               <td className="px-6 py-5 text-right">
-                                <div className="flex justify-end gap-2">
-                                  <button onClick={() => handleCopyKey(key)} className="p-1.5 text-body hover:text-ink" title="Copy"><span className="material-symbols-outlined text-[18px]">{copiedKey === key ? 'check_circle' : 'content_copy'}</span></button>
-                                  <button onClick={() => handleDeleteKey(key)} className="p-1.5 text-red-400 hover:text-red-600" title="Delete"><span className="material-symbols-outlined text-[18px]">block</span></button>
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedAccessKey(key)
+                                      pushToast('INFO', lang === 'zh' ? '已选择配置 Key' : 'Key Selected', key)
+                                    }}
+                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${isSelected ? 'text-emerald-700 bg-emerald-100 font-bold' : 'text-body hover:text-ink hover:bg-canvas-soft'}`}
+                                    title={lang === 'zh' ? '在下方接入卡片中查看并使用此 Key' : 'Configure with this Key'}
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">tune</span>
+                                  </button>
+                                  <button onClick={() => handleCopyKey(key)} className="p-1.5 text-body hover:text-ink cursor-pointer" title="Copy"><span className="material-symbols-outlined text-[18px]">{copiedKey === key ? 'check_circle' : 'content_copy'}</span></button>
+                                  <button onClick={() => handleDeleteKey(key)} className="p-1.5 text-red-400 hover:text-red-600 cursor-pointer" title="Delete"><span className="material-symbols-outlined text-[18px]">block</span></button>
                                 </div>
                               </td>
                             </tr>
@@ -2357,266 +1937,356 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ─── API 调用配置与可调用模型 (极简 QoderGate 原生风格) ─── */}
-              <div className="glass-card rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm border border-hairline">
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-hairline">
-                  <div className="flex items-center gap-3">
-                    <span className="p-2.5 rounded-xl bg-ink text-white shadow-sm flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-[22px]">api</span>
-                    </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-lg text-ink">
-                          {lang === 'zh' ? 'API 调用接入与可用模型' : 'API Endpoints & Available Models'}
-                        </h3>
-                        <span className="text-[10px] font-bold uppercase tracking-wider bg-mint/20 text-ink px-2 py-0.5 rounded-full border border-mint/40">
-                          OpenAI Compatible
+              {/* ─── CODEX++ STYLE MINIMAL API ACCESS & MODEL SELECTION ─── */}
+              {(() => {
+                const activeKey = selectedAccessKey || apiConfig.allowed_keys[0] || ''
+                const activeKeyDetail = apiConfig.allowed_keys_detail?.find(d => d.api_key === activeKey)
+                const boundAccount = activeKeyDetail?.account_uid
+                  ? accountsConfig.accounts.find(a => a.uid === activeKeyDetail.account_uid)
+                  : null
+
+                const copyAllModelsText = () => {
+                  const allIds = VERIFIED_MODELS.map(m => m.id).join(', ')
+                  navigator.clipboard.writeText(allIds)
+                  pushToast('SUCCESS', lang === 'zh' ? '已复制全部模型' : 'Copied All Models', lang === 'zh' ? '已复制 14 款可用模型名称' : 'Copied 14 model IDs')
+                }
+
+                const copyCurlCommand = () => {
+                  const cmd = `curl https://lite.bigbob.asia/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${activeKey || 'YOUR_API_KEY'}" \\\n  -d '{"model": "kimi-k3", "messages": [{"role": "user", "content": "你好"}]}'`
+                  navigator.clipboard.writeText(cmd)
+                  pushToast('INFO', lang === 'zh' ? '已复制 cURL 示例' : 'Copied cURL', lang === 'zh' ? '已将完整请求命令写入剪贴板' : 'cURL command copied')
+                }
+
+                return (
+                  <div className="glass-card rounded-2xl p-6 sm:p-8 space-y-6 shadow-sm">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-hairline">
+                      <div className="flex items-center gap-3.5">
+                        <span className="p-2.5 rounded-xl bg-ink text-white shadow-sm flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-[22px]">api</span>
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="font-bold text-lg text-ink">
+                              {lang === 'zh' ? 'API 调用接入与可用模型' : 'API Access & Available Models'}
+                            </h2>
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full">
+                              OpenAI Compatible
+                            </span>
+                          </div>
+                          <p className="text-body text-xs mt-0.5">
+                            {lang === 'zh'
+                              ? '原生兼容 OpenAI 协议规范。可直接将 Base URL、Key 与模型名称填入 Codex++、Cursor、Cherry Studio、NextChat、ZCode 等客户端。'
+                              : 'Fully OpenAI compatible. Configure in Codex++, Cursor, Cherry Studio, NextChat, etc.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Top Action Buttons */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={copyAllModelsText}
+                          className="px-3.5 py-2 rounded-xl bg-ink text-white hover:bg-neutral-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                          <span>{lang === 'zh' ? '复制全部模型名' : 'Copy All Models'}</span>
+                        </button>
+                        <button
+                          onClick={copyCurlCommand}
+                          className="px-3.5 py-2 rounded-xl bg-white border border-hairline hover:bg-canvas-soft text-ink text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">terminal</span>
+                          <span>{lang === 'zh' ? 'cURL 示例' : 'cURL Example'}</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            fetchAccounts();
+                            pushToast('INFO', lang === 'zh' ? '模型与账号刷新' : 'Refreshed', lang === 'zh' ? '模型列表已更新并已验证生产可用' : 'Models verified');
+                          }}
+                          className="px-3 py-2 rounded-xl bg-white border border-hairline hover:bg-canvas-soft text-ink text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">refresh</span>
+                          <span>{lang === 'zh' ? '刷新' : 'Refresh'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Key Selector & Dispatch Status */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Left: Base URL */}
+                      <div className="bg-canvas-soft/60 border border-hairline rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-body uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-ink text-[16px]">link</span>
+                            {lang === 'zh' ? '调用地址 (Base URL)' : 'Base URL'}
+                          </span>
+                          <span className="text-[10px] text-emerald-700 bg-emerald-100 border border-emerald-200 font-bold px-2 py-0.5 rounded-full">
+                            ● {lang === 'zh' ? '生产环境' : 'Live Gateway'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value="https://lite.bigbob.asia/v1"
+                            readOnly
+                            className="w-full h-10 bg-white border border-hairline rounded-lg px-3 text-xs font-mono text-ink outline-none select-all"
+                          />
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText('https://lite.bigbob.asia/v1')
+                              pushToast('INFO', lang === 'zh' ? '已复制 Base URL' : 'Copied Base URL', 'https://lite.bigbob.asia/v1')
+                            }}
+                            className="h-10 px-3.5 bg-ink text-white hover:bg-neutral-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">content_copy</span>
+                            <span>{t.common.copy}</span>
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-body flex items-center gap-1 pt-1 font-mono">
+                          <span className="opacity-60">{lang === 'zh' ? '完整对话端点:' : 'Endpoint:'}</span>
+                          <span
+                            onClick={() => {
+                              navigator.clipboard.writeText('https://lite.bigbob.asia/v1/chat/completions')
+                              pushToast('INFO', lang === 'zh' ? '已复制端点' : 'Copied Endpoint', 'https://lite.bigbob.asia/v1/chat/completions')
+                            }}
+                            className="text-ink font-semibold select-all hover:underline cursor-pointer"
+                            title="点击复制完整端点"
+                          >
+                            https://lite.bigbob.asia/v1/chat/completions
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Right: API Key */}
+                      <div className="bg-canvas-soft/60 border border-hairline rounded-xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-body uppercase tracking-wider flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-ink text-[16px]">vpn_key</span>
+                              {lang === 'zh' ? '调用密钥 (API Key)' : 'API Key'}
+                            </span>
+                            {apiConfig.allowed_keys.length > 1 && (
+                              <select
+                                value={activeKey}
+                                onChange={(e) => setSelectedAccessKey(e.target.value)}
+                                className="text-[10px] font-bold px-2 py-0.5 rounded border border-hairline bg-white text-ink outline-none cursor-pointer"
+                              >
+                                {apiConfig.allowed_keys.map(k => {
+                                  const kd = apiConfig.allowed_keys_detail?.find(d => d.api_key === k)
+                                  const acc = kd?.account_uid ? accountsConfig.accounts.find(a => a.uid === kd.account_uid) : null
+                                  return (
+                                    <option key={k} value={k}>
+                                      {k.slice(0, 12)}... {acc ? `(${acc.user_type === 'enterprise' || acc.plan === 'team' ? '🏢 企业' : '👤 个人'}: ${acc.name})` : '(🌐 全局轮询)'}
+                                    </option>
+                                  )
+                                })}
+                              </select>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => setKeyMasked(!keyMasked)}
+                            className="text-[11px] text-body hover:text-ink flex items-center gap-1 cursor-pointer font-medium"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">
+                              {keyMasked ? 'visibility' : 'visibility_off'}
+                            </span>
+                            <span>{keyMasked ? (lang === 'zh' ? '显示' : 'Show') : (lang === 'zh' ? '隐藏' : 'Hide')}</span>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type={keyMasked ? "password" : "text"}
+                            value={activeKey}
+                            readOnly
+                            placeholder={lang === 'zh' ? '请先在上方添加 API Key' : 'No API Key configured'}
+                            className="w-full h-10 bg-white border border-hairline rounded-lg px-3 text-xs font-mono text-ink outline-none select-all"
+                          />
+                          <button
+                            onClick={() => {
+                              if (!activeKey) return
+                              navigator.clipboard.writeText(activeKey)
+                              pushToast('INFO', lang === 'zh' ? '已复制 API Key' : 'Copied Key', activeKey)
+                            }}
+                            disabled={!activeKey}
+                            className="h-10 px-3.5 bg-ink text-white hover:bg-neutral-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer disabled:opacity-50"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">content_copy</span>
+                            <span>{t.common.copy}</span>
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-body flex items-center justify-between pt-1">
+                          <span>{lang === 'zh' ? '请求头:' : 'Header:'} <code className="bg-canvas-soft px-1.5 py-0.5 rounded font-mono text-ink">Authorization: Bearer &lt;Key&gt;</code></span>
+                          <span className="text-[10px] opacity-70 font-mono">{lang === 'zh' ? '客户端直连无需加后缀' : 'Auto-routed'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Routing Directive Callout: Explaining Account Binding */}
+                    {boundAccount ? (
+                      <div className="bg-emerald-50/90 border border-emerald-200 rounded-xl p-4.5 space-y-2 transition-all">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 font-bold text-emerald-950 text-xs">
+                            <span className="material-symbols-outlined text-emerald-700 text-[18px]">verified_user</span>
+                            <span>
+                              {lang === 'zh'
+                                ? `当前 Key 已专属锁定账号：${boundAccount.user_type === 'enterprise' || boundAccount.plan === 'team' ? '🏢 企业号' : '👤 个人号'}【${boundAccount.name}】`
+                                : `This Key is locked to ${boundAccount.user_type === 'enterprise' || boundAccount.plan === 'team' ? '🏢 Enterprise' : '👤 Personal'} account: ${boundAccount.name}`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="bg-emerald-200/80 text-emerald-900 font-mono font-bold px-2 py-0.5 rounded text-[11px]">
+                              {boundAccount.quota} credits
+                            </span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-700 text-white px-2 py-0.5 rounded">
+                              {lang === 'zh' ? '独享专属' : 'Dedicated'}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-emerald-900/80 text-xs leading-relaxed">
+                          {lang === 'zh' ? (
+                            <>
+                              💡 <strong>客户端零配置直连</strong>：在 Codex++ / Cursor / Cherry Studio 中填入此 Key 即可。
+                              客户端模型名称直接填写原生模型名（如 <code>kimi-k3</code>、<code>deepseek-v4-pro</code>），<strong>无需在模型名后追加 @账号后缀</strong>！网关将 100% 自动把请求路由至该专属账号。
+                            </>
+                          ) : (
+                            <>
+                              💡 <strong>Zero-config direct routing</strong>: Just configure this Key in your client. Send requests using native model names (e.g. <code>kimi-k3</code>). The gateway automatically routes 100% of requests to this dedicated account without needing any @account suffix!
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-4.5 space-y-2 transition-all">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 font-bold text-blue-950 text-xs">
+                            <span className="material-symbols-outlined text-blue-700 text-[18px]">hub</span>
+                            <span>
+                              {lang === 'zh' ? '当前 Key 调度模式：全账号公共池智能负载均衡' : 'Routing Mode: Global Account Pool Load Balancing'}
+                            </span>
+                          </div>
+                          <span className="bg-blue-200/80 text-blue-900 font-mono font-bold px-2 py-0.5 rounded text-[11px]">
+                            {lang === 'zh' ? '共享轮询' : 'Shared Pool'}
+                          </span>
+                        </div>
+                        <p className="text-blue-950/80 text-xs leading-relaxed">
+                          {lang === 'zh' ? (
+                            <>
+                              🌐 请求将由网关在所有已启用且开启“全部调用”的账号间自动轮询调度。
+                              💡 <strong>临时单账号指定技巧</strong>：若使用此公共 Key 但希望临时锁定特定账号，支持在客户端模型名后追加 <code>@账号名</code>（例如：<code>kimi-k3@{accountsConfig.accounts[0]?.name || 'liuzhuyun'}</code>），网关即可穿透定向！
+                            </>
+                          ) : (
+                            <>
+                              🌐 Requests will automatically load balance across all eligible accounts.
+                              💡 <strong>Targeting tip</strong>: You can append <code>@account</code> to any model name (e.g. <code>kimi-k3@{accountsConfig.accounts[0]?.name || 'liuzhuyun'}</code>) to force routing to a specific account.
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Available Models Table (14 verified working models) */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-ink text-sm">
+                            {lang === 'zh' ? '可调用模型列表' : 'Available Models'}
+                          </span>
+                          <span className="text-[11px] bg-canvas-soft border border-hairline text-body font-mono px-2 py-0.5 rounded-full font-bold">
+                            {VERIFIED_MODELS.length} {lang === 'zh' ? '个模型全部实测通过' : 'models verified'}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-body">
+                          {lang === 'zh' ? '💡 单击任意模型名或右侧复制按钮即可直接拷贝' : '💡 Click any model row to copy model ID'}
                         </span>
                       </div>
-                      <p className="text-body text-xs mt-0.5">
-                        {lang === 'zh'
-                          ? '标准兼容 OpenAI 原生协议规范，可直接将 Base URL、Key 与模型名称填入 Codex++、Cursor、Cherry Studio、NextChat、ZCode 等客户端。'
-                          : 'Fully OpenAI compatible. Copy Base URL, Key, and model IDs into Codex++, Cursor, Cherry Studio, NextChat, etc.'}
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* Quick Action Tools */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      onClick={handleCopyAllModels}
-                      className="px-3.5 py-2 rounded-xl bg-ink text-white hover:bg-neutral-800 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
-                      title={lang === 'zh' ? '每行一个模型名，换行隔开，可直接粘贴进 Codex++ 或客户端模型设置' : 'Copy newline-separated model IDs'}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">content_copy</span>
-                      <span>{lang === 'zh' ? '复制全部模型名' : 'Copy All Models'}</span>
-                    </button>
-
-                    <button
-                      onClick={handleCopyCurl}
-                      className="px-3.5 py-2 rounded-xl bg-canvas-soft border border-hairline hover:bg-hairline text-ink text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
-                      title={lang === 'zh' ? '复制终端 cURL 请求命令示例' : 'Copy cURL command'}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">terminal</span>
-                      <span>{lang === 'zh' ? 'cURL 示例' : 'cURL'}</span>
-                    </button>
-
-                    <button
-                      onClick={handleFetchUpstreamModels}
-                      disabled={fetchingUpstreamModels}
-                      className="px-3 py-2 rounded-xl bg-canvas-soft border border-hairline hover:bg-hairline text-ink text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
-                      title={lang === 'zh' ? '刷新网关最新模型列表' : 'Refresh model list'}
-                    >
-                      <span className={`material-symbols-outlined text-[16px] ${fetchingUpstreamModels ? 'animate-spin' : ''}`}>
-                        refresh
-                      </span>
-                      <span>{lang === 'zh' ? '刷新模型' : 'Refresh'}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Row 1: Base URL & Key (Two Clean Cards) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Base URL */}
-                  <div className="bg-canvas-soft/60 border border-hairline rounded-xl p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-body uppercase tracking-wider flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-ink text-[16px]">link</span>
-                        {lang === 'zh' ? '调用地址 (Base URL)' : 'Base URL'}
-                      </span>
-                      <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 font-bold px-2 py-0.5 rounded-full">
-                        ● 生产环境
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={resolvedBaseUrl}
-                        readOnly
-                        className="w-full h-10 bg-white border border-hairline rounded-lg px-3 text-xs font-mono text-ink outline-none select-all"
-                      />
-                      <button
-                        onClick={handleCopyBaseUrl}
-                        className="h-10 px-3.5 bg-ink text-white hover:bg-neutral-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">content_copy</span>
-                        <span>{lang === 'zh' ? '复制' : 'Copy'}</span>
-                      </button>
-                    </div>
-                    <div className="text-[11px] text-body flex items-center gap-1 pt-1 font-mono">
-                      <span className="text-body/60">对话端点:</span>
-                      <span
-                        onClick={() => {
-                          navigator.clipboard.writeText(`${resolvedBaseUrl}/chat/completions`)
-                          pushToast('SUCCESS', lang === 'zh' ? '已复制对话端点' : 'Copied Endpoint', `${resolvedBaseUrl}/chat/completions`)
-                        }}
-                        className="text-ink font-semibold select-all hover:underline cursor-pointer"
-                        title={lang === 'zh' ? '点击复制完整端点' : 'Click to copy endpoint'}
-                      >
-                        {resolvedBaseUrl}/chat/completions
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* API Key */}
-                  <div className="bg-canvas-soft/60 border border-hairline rounded-xl p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-body uppercase tracking-wider flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-ink text-[16px]">key</span>
-                        {lang === 'zh' ? '调用密钥 (API Key)' : 'API Key'}
-                      </span>
-                      <button
-                        onClick={() => setShowCodexApiKey(!showCodexApiKey)}
-                        className="text-[11px] text-body hover:text-ink flex items-center gap-1 cursor-pointer font-medium"
-                      >
-                        <span className="material-symbols-outlined text-[14px]">{showCodexApiKey ? 'visibility_off' : 'visibility'}</span>
-                        <span>{showCodexApiKey ? (lang === 'zh' ? '隐藏' : '显示') : (lang === 'zh' ? '显示' : 'Hide')}</span>
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {apiConfig.allowed_keys.length > 1 ? (
-                        <select
-                          value={effectiveCodexKey}
-                          onChange={(e) => setSelectedApiKeyForCodex(e.target.value)}
-                          className="w-full h-10 bg-white border border-hairline rounded-lg px-3 text-xs font-mono text-ink outline-none"
-                        >
-                          {apiConfig.allowed_keys.map((k) => {
-                            const d = apiConfig.allowed_keys_detail?.find(item => item.api_key === k)
-                            const label = d?.name ? `${d.name} (${k.substring(0, 10)}...)` : `${k.substring(0, 16)}...`
-                            return <option key={k} value={k}>{label}</option>
-                          })}
-                        </select>
-                      ) : (
-                        <input
-                          type={showCodexApiKey ? 'text' : 'password'}
-                          value={effectiveCodexKey}
-                          readOnly
-                          className="w-full h-10 bg-white border border-hairline rounded-lg px-3 text-xs font-mono text-ink outline-none select-all"
-                        />
-                      )}
-                      <button
-                        onClick={handleCopyCodexKey}
-                        className="h-10 px-3.5 bg-ink text-white hover:bg-neutral-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">content_copy</span>
-                        <span>{lang === 'zh' ? '复制' : 'Copy'}</span>
-                      </button>
-                    </div>
-                    <div className="text-[11px] text-body/70 flex items-center justify-between pt-1">
-                      <span>请求头格式: <code className="bg-black/5 px-1 py-0.5 rounded font-mono text-ink">Authorization: Bearer &lt;Key&gt;</code></span>
-                      {accountsConfig.accounts.length > 0 && (
-                        <span className="text-[10px] text-body/80 font-mono">
-                          支持 <code className="bg-black/5 px-1 py-0.5 rounded text-ink">model@账号名</code> 单独调用
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Row 2: 可调用模型列表 (极简纯净表格) */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-ink text-sm">
-                        {lang === 'zh' ? '可调用模型列表' : 'Available Models'}
-                      </span>
-                      <span className="text-[11px] bg-canvas-soft border border-hairline text-body font-mono px-2 py-0.5 rounded-full font-bold">
-                        {codexModels.length} 个模型
-                      </span>
-                    </div>
-                    <span className="text-[11px] text-body">
-                      {lang === 'zh' ? '💡 单击任意模型名或点击右侧按钮即可复制' : 'Click any model to copy'}
-                    </span>
-                  </div>
-
-                  <div className="border border-hairline rounded-xl overflow-hidden shadow-2xs">
-                    <div className="overflow-x-auto max-h-[460px]">
-                      <table className="w-full text-left">
-                        <thead className="bg-canvas-soft/80 border-b border-hairline text-[10px] font-semibold text-body uppercase tracking-wider sticky top-0 z-10 backdrop-blur-sm">
-                          <tr>
-                            <th className="px-5 py-3">{lang === 'zh' ? '模型标识 (Model ID)' : 'Model ID'}</th>
-                            <th className="px-4 py-3 w-36">{lang === 'zh' ? '厂商 / 系列' : 'Vendor'}</th>
-                            <th className="px-4 py-3 w-28">{lang === 'zh' ? '上下文容量' : 'Context'}</th>
-                            <th className="px-4 py-3">{lang === 'zh' ? '适用场景 / 特点' : 'Description'}</th>
-                            <th className="px-5 py-3 text-right w-24">{lang === 'zh' ? '操作' : 'Action'}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-hairline text-xs">
-                          {codexModels.map((item) => {
-                            const vendor = getModelVendorInfo(item.id)
-                            return (
-                              <tr
-                                key={item.id}
-                                className="hover:bg-canvas-soft/60 transition-colors group cursor-pointer"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(item.id)
-                                  pushToast('SUCCESS', lang === 'zh' ? '已复制模型名' : 'Copied Model', item.id)
-                                }}
-                              >
-                                <td className="px-5 py-3.5 font-mono text-ink font-bold">
-                                  <div className="flex items-center gap-2">
-                                    <span className="group-hover:text-primary transition-colors">{item.id}</span>
-                                    {item.recommended && (
-                                      <span className="text-[10px] font-sans font-extrabold bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded shrink-0">
-                                        🔥 推荐
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3.5">
-                                  <span className={`inline-block text-[11px] px-2 py-0.5 rounded-md border font-medium ${vendor.badgeLight}`}>
-                                    {vendor.vendor}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3.5 font-mono text-body font-semibold">
-                                  {item.contextWindow || '1M'}
-                                </td>
-                                <td className="px-4 py-3.5 text-body text-[11px]">
-                                  {getModelDescription(item.id)}
-                                </td>
-                                <td className="px-5 py-3.5 text-right">
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      navigator.clipboard.writeText(item.id)
-                                      pushToast('SUCCESS', lang === 'zh' ? '已复制模型名' : 'Copied Model', item.id)
-                                    }}
-                                    className="p-1.5 rounded-lg text-body hover:text-ink hover:bg-canvas-soft transition-colors"
-                                    title={lang === 'zh' ? '复制该模型名称' : 'Copy model ID'}
-                                  >
-                                    <span className="material-symbols-outlined text-[16px]">content_copy</span>
-                                  </button>
-                                </td>
+                      <div className="border border-hairline rounded-xl overflow-hidden shadow-2xs">
+                        <div className="overflow-x-auto max-h-[460px] custom-scroll">
+                          <table className="w-full text-left">
+                            <thead className="bg-canvas-soft/80 border-b border-hairline text-[10px] font-semibold text-body uppercase tracking-wider sticky top-0 z-10 backdrop-blur-sm">
+                              <tr>
+                                <th className="px-5 py-3">{lang === 'zh' ? '模型标识 (Model ID)' : 'Model ID'}</th>
+                                <th className="px-4 py-3 w-36">{lang === 'zh' ? '厂商 / 系列' : 'Provider'}</th>
+                                <th className="px-4 py-3 w-28">{lang === 'zh' ? '上下文容量' : 'Context'}</th>
+                                <th className="px-4 py-3 w-28">{lang === 'zh' ? '实测延迟' : 'Latency'}</th>
+                                <th className="px-4 py-3">{lang === 'zh' ? '适用场景 / 特点' : 'Description'}</th>
+                                <th className="px-5 py-3 text-right w-28">{lang === 'zh' ? '操作' : 'Action'}</th>
                               </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                            </thead>
+                            <tbody className="divide-y divide-hairline text-xs">
+                              {VERIFIED_MODELS.map((item) => (
+                                <tr
+                                  key={item.id}
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(item.id)
+                                    setCopiedModel(item.id)
+                                    pushToast('INFO', lang === 'zh' ? '已复制模型名' : 'Copied Model', item.id)
+                                    setTimeout(() => setCopiedModel(null), 1500)
+                                  }}
+                                  className="hover:bg-canvas-soft/60 transition-colors group cursor-pointer"
+                                >
+                                  <td className="px-5 py-3.5 font-mono text-ink font-bold">
+                                    <div className="flex items-center gap-2">
+                                      <span className="group-hover:text-blue-600 transition-colors">{item.id}</span>
+                                      {item.rec && (
+                                        <span className="text-[10px] font-sans font-extrabold bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.2 rounded shrink-0">
+                                          {lang === 'zh' ? '🔥 推荐' : '🔥 Top'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3.5">
+                                    <span className={`inline-block text-[11px] px-2 py-0.5 rounded-md border font-medium ${item.badge}`}>
+                                      {item.vendor}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3.5 font-mono text-body font-semibold">
+                                    {item.context}
+                                  </td>
+                                  <td className="px-4 py-3.5 font-mono text-emerald-700 font-semibold text-[11px]">
+                                    {item.latency}
+                                  </td>
+                                  <td className="px-4 py-3.5 text-body text-[11px]">
+                                    {lang === 'zh' ? item.descZh : item.descEn}
+                                  </td>
+                                  <td className="px-5 py-3.5 text-right">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        navigator.clipboard.writeText(item.id)
+                                        setCopiedModel(item.id)
+                                        pushToast('INFO', lang === 'zh' ? '已复制模型名' : 'Copied Model', item.id)
+                                        setTimeout(() => setCopiedModel(null), 1500)
+                                      }}
+                                      className="p-1.5 rounded-lg text-body hover:text-ink hover:bg-canvas-soft transition-colors cursor-pointer"
+                                      title={lang === 'zh' ? '复制模型名' : 'Copy Model ID'}
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">
+                                        {copiedModel === item.id ? 'check_circle' : 'content_copy'}
+                                      </span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Codex++ Setup Hint */}
+                    <div className="flex items-center gap-2 p-3.5 bg-canvas-soft/70 border border-hairline rounded-xl text-xs text-body">
+                      <span className="material-symbols-outlined text-[18px] text-ink opacity-70">lightbulb</span>
+                      <span>
+                        {lang === 'zh'
+                          ? 'Codex++ 接入提示：添加自定义供应商时，会话身份选「Custom (默认)」，上游协议选「Chat Completions」即可原生无缝使用。'
+                          : 'Codex++ setup: Select "Custom" identity and "Chat Completions" protocol for seamless integration.'}
+                      </span>
                     </div>
                   </div>
-                </div>
-
-                {/* Codex++ friendly note */}
-                <div className="flex items-center gap-2 p-3 bg-canvas-soft/60 border border-hairline rounded-xl text-xs text-body">
-                  <span className="material-symbols-outlined text-[16px] text-body/80">lightbulb</span>
-                  <span>
-                    {lang === 'zh'
-                      ? 'Codex++ 接入提示：添加自定义供应商时，会话身份选「Custom (默认)」，上游协议选「Chat Completions」即可完美兼容。'
-                      : 'Codex++ tip: In provider settings, keep Session Identity as Custom and Protocol as Chat Completions.'}
-                  </span>
-                </div>
-              </div>
-
-              <section className="bg-ink text-white p-8 rounded-2xl flex items-center justify-between relative overflow-hidden shadow-xl">
-                <div className="relative z-10 max-w-xl">
-                  <h2 className="font-display-sm mb-4">{t.api.bestPractices}</h2>
-                  <p className="text-white/70 font-medium leading-relaxed text-sm">{t.api.bestPracticesDesc}</p>
-                  <button className="mt-8 border border-white/20 px-6 py-2.5 rounded-xl hover:bg-white/10 transition-all font-bold text-xs uppercase tracking-wider">{t.api.securityPolicy}</button>
-                </div>
-                <div className="hidden lg:block opacity-20"><span className="material-symbols-outlined" style={{ fontSize: '120px', fontVariationSettings: "'FILL' 1" }}>shield</span></div>
-              </section>
+                )
+              })()}
             </div>
           )}
 

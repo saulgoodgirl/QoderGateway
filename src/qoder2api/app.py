@@ -480,9 +480,6 @@ async def list_models():
         "deepseek-v4-pro",
         "qwen-3.8-max",
         "glm-5.3",
-        "minimax-m2.7",
-        "auto",
-        "lite",
         "kimi-k2.8",
         "deepseek-flash",
         "qwen-3.8-flash",
@@ -491,16 +488,19 @@ async def list_models():
         "qwen-3.7-flash",
         "glm-5.3-flash",
         "glm-5.2",
+        "auto",
+        "lite",
+        # Legacy aliases
         "kmodel_latest", "kmodel",
         "dmodel", "dfmodel",
         "qmodel_38max", "qfmodel", "qmodel_latest", "qmodel", "q37fmodel",
         "gmodel", "gfmodel", "gm51model",
-        "mmodel",
     ]
     return {
         "object": "list",
         "data": [{"id": m, "object": "model", "created": 1789700000, "owned_by": "qoder"} for m in models_list]
     }
+
 
 
 @app.post("/v1/chat/completions")
