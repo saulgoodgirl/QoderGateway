@@ -28,10 +28,34 @@ logger = logging.getLogger("qoder2api.checkin")
 # 北京时间时区 (UTC+8)
 TZ_SHANGHAI = timezone(timedelta(hours=8))
 
-# 记录最后自动执行签到的日期字符串 (YYYY-MM-DD)
-_last_auto_checkin_date: str | None = None
+# 记录最后自动执行签到的周期字符串 (YYYY-MM-DD，以 10:00 UTC+8 为锚点)
+_last_auto_checkin_cycle: str | None = None
 _checkin_thread: threading.Thread | None = None
 _checkin_lock = threading.Lock()
+
+
+def get_current_checkin_cycle() -> str:
+    """获取当前签到周期标识（以每日 10:00:00 UTC+8 为界）。
+    例如：
+    09-23 09:30 -> 属于 2026-09-22 周期（昨天 10:00 到今天 10:00）
+    09-23 10:00 -> 属于 2026-09-23 周期（今天 10:00 到明天 10:00）
+    """
+    now_sh = datetime.now(TZ_SHANGHAI)
+    if now_sh.hour < 10:
+        cycle_dt = now_sh - timedelta(days=1)
+    else:
+        cycle_dt = now_sh
+    return cycle_dt.strftime("%Y-%m-%d")
+
+
+def get_seconds_until_next_refresh() -> int:
+    """计算距离下一个 10:00:00 (UTC+8) 官方刷新时刻的剩余秒数。"""
+    now_sh = datetime.now(TZ_SHANGHAI)
+    if now_sh.hour < 10:
+        target = now_sh.replace(hour=10, minute=0, second=0, microsecond=0)
+    else:
+        target = (now_sh + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    return max(0, int((target - now_sh).total_seconds()))
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -138,6 +162,12 @@ def claim_checkin(uid: str) -> dict[str, Any]:
         if r.status_code == 200:
             data = r.json()
             reward = data.get("rewardCredits", 100)
+            current_cycle = get_current_checkin_cycle()
+            try:
+                with get_db() as conn:
+                    conn.execute("UPDATE accounts SET last_checkin_cycle = ? WHERE uid = ?", (current_cycle, uid))
+            except Exception:
+                pass
             return {
                 "ok": True,
                 "claimed": True,
@@ -151,6 +181,12 @@ def claim_checkin(uid: str) -> dict[str, Any]:
 
         if r.status_code == 409:
             # 已经签过到了
+            current_cycle = get_current_checkin_cycle()
+            try:
+                with get_db() as conn:
+                    conn.execute("UPDATE accounts SET last_checkin_cycle = ? WHERE uid = ?", (current_cycle, uid))
+            except Exception:
+                pass
             return {
                 "ok": True,
                 "claimed": False,
@@ -306,45 +342,60 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
         "total_credits_claimed_today": total_credits_claimed_today,
         "total_remaining_credits": round(total_remaining_credits, 1),
         "accounts": accounts_detail,
-        "last_auto_date": _last_auto_checkin_date,
+        "last_auto_date": _last_auto_checkin_cycle,
+        "cycle_id": get_current_checkin_cycle(),
+        "next_refresh_seconds": get_seconds_until_next_refresh(),
+        "refresh_rule": "每日 10:00 (UTC+8) 刷新，领取后 30 天有效 + 100 Credits",
     }
 
 
 # ---------------------------------------------------------------------------
-# 后台自动定时签到循环（开机补签 + 每天 00:05 自动执行）
+# 后台自动定时签到循环（开机按需补签 + 每天 10:00:05 准时自动执行）
 # ---------------------------------------------------------------------------
 def _checkin_loop() -> None:
-    global _last_auto_checkin_date
-    # 开机后稍作延时（3秒），先执行一次开机补签
+    global _last_auto_checkin_cycle
+    # 开机后稍作延时（3秒）
     time.sleep(3)
     try:
         now_sh = datetime.now(TZ_SHANGHAI)
-        today_str = now_sh.strftime("%Y-%m-%d")
-        res = checkin_all_accounts()
-        _last_auto_checkin_date = today_str
-        logger.info(
-            f"[Checkin Auto] Startup run: claimed={res['claimed']}, already={res['already_claimed']}, failed={res['failed']}"
-        )
+        current_cycle = get_current_checkin_cycle()
+        # 若当前时间在上午 10:00 之后，执行一次开机补签以防服务离线期间漏领
+        if now_sh.hour >= 10:
+            logger.info(f"[Checkin Auto] Startup run: past 10:00 AM, checking cycle {current_cycle}...")
+            res = checkin_all_accounts()
+            _last_auto_checkin_cycle = current_cycle
+            logger.info(
+                f"[Checkin Auto] Startup run finished: claimed={res['claimed']}, already={res['already_claimed']}, failed={res['failed']}"
+            )
+        else:
+            remaining_secs = get_seconds_until_next_refresh()
+            hours = remaining_secs // 3600
+            mins = (remaining_secs % 3600) // 60
+            secs = remaining_secs % 60
+            logger.info(
+                f"[Checkin Auto] Startup initialized: current time before 10:00 AM. Next official refresh in {hours:02d}:{mins:02d}:{secs:02d} (at 10:00:05 UTC+8)."
+            )
     except Exception as e:
         logger.error(f"[Checkin Auto] Startup checkin failed: {e}")
 
-    # 循环检测：每 60 秒检查一次，若跨天并且过了 00:05 则执行
+    # 循环检测：每 20 秒检查一次是否到达 10:00:00 (UTC+8) 刷新分界点
     while True:
         try:
-            time.sleep(60)
+            time.sleep(20)
             now_sh = datetime.now(TZ_SHANGHAI)
-            today_str = now_sh.strftime("%Y-%m-%d")
-            # 当天尚未自动执行，且当前时间在 00:05 之后
-            if _last_auto_checkin_date != today_str and (now_sh.hour > 0 or now_sh.minute >= 5):
-                logger.info(f"[Checkin Auto] Triggering daily auto-checkin for date: {today_str}")
+            current_cycle = get_current_checkin_cycle()
+            # 当天当前周期尚未自动执行，且当前时间在 10:00 之后
+            if now_sh.hour >= 10 and _last_auto_checkin_cycle != current_cycle:
+                logger.info(f"[Checkin Auto] Triggering daily 10:00:00 (UTC+8) auto-checkin for cycle: {current_cycle}")
                 res = checkin_all_accounts()
-                _last_auto_checkin_date = today_str
+                _last_auto_checkin_cycle = current_cycle
                 logger.info(
-                    f"[Checkin Auto] Finished: claimed={res['claimed']}, already={res['already_claimed']}, failed={res['failed']}"
+                    f"[Checkin Auto] Finished: claimed={res['claimed']}, already={res['already_claimed']}, "
+                    f"failed={res['failed']}, +{res.get('total_credits', 0)} Credits"
                 )
         except Exception as e:
             logger.error(f"[Checkin Auto] Loop exception: {e}")
-            time.sleep(60)
+            time.sleep(30)
 
 
 def start_checkin_loop() -> None:

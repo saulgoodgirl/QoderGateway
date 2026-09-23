@@ -51,6 +51,9 @@ interface CheckinOverview {
   total_remaining_credits: number
   accounts: CheckinAccount[]
   last_auto_date: string | null
+  cycle_id?: string
+  next_refresh_seconds?: number
+  refresh_rule?: string
 }
 
 interface RegTask {
@@ -127,7 +130,7 @@ const UI_TEXT = {
     accounts: { desc: 'Manage Qoder accounts used by the gateway. Toggle "API Routing" to include/exclude accounts from external calls while keeping daily check-ins active.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add a PAT from Dashboard.', showing: 'Showing {count} account(s)' },
     checkin: {
       bannerTitle: 'Daily Rewards · 100 Credits Per Account',
-      desc: 'Claim 100 free compute credits every day for each Qoder account. Background auto-worker runs daily at 00:05 (UTC+8) to claim automatically.',
+      desc: 'Claim 100 free compute credits every day for each Qoder account. Resets daily at 10:00 (UTC+8), valid for 30 days. Gateway auto-worker runs daily at 10:00:05 (UTC+8) to claim automatically.',
       claimAll: 'Claim All Accounts Today',
       claiming: 'Claiming Rewards...',
       refresh: 'Refresh Status',
@@ -137,7 +140,8 @@ const UI_TEXT = {
       statsCreditsToday: 'Credits Claimed Today',
       statsTotalCredits: 'Pool Remaining Credits',
       statsAutoSchedule: 'Auto Check-in Daemon',
-      statsAutoScheduleDesc: 'Active · Runs daily at 00:05',
+      statsAutoScheduleDesc: 'Active · Runs daily at 10:00:00 (UTC+8)',
+      nextRefreshCountdown: 'Next 10:00 Reset In',
       tableTitle: 'Account Check-in & Credit Balance',
       colAccount: 'Account',
       colPlan: 'Plan Tier',
@@ -200,7 +204,7 @@ const UI_TEXT = {
     accounts: { desc: '管理网关用于请求路由和失败切换的 Qoder 账号。可单独控制账号是否参与 API 调用调度（排除调用仍享每日自动签到与令牌保活）。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击导入账号，或在控制台添加 PAT。', showing: '共 {count} 个账号' },
     checkin: {
       bannerTitle: '每日签到福利 · 每个账号 +100 Credits',
-      desc: '每个 Qoder 账号每天可免费领取 100 算力 Credits。网关后台守护线程将在每日 00:05（北京时间）自动执行签到补领，也可随时一键为全部账号领完。',
+      desc: '每个 Qoder 账号每天可免费领取 100 算力 Credits。官方每日 10:00 (UTC+8) 准时刷新，领取后 30 天有效。网关后台守护线程将在每日 10:00:05 准时自动执行签到补领，也可随时一键为全部账号领完。',
       claimAll: '一键签到全部账号',
       claiming: '正在签到领取中...',
       refresh: '刷新签到状态',
@@ -210,7 +214,8 @@ const UI_TEXT = {
       statsCreditsToday: '今日已领算力',
       statsTotalCredits: '账号池可用总算力',
       statsAutoSchedule: '自动签到守护',
-      statsAutoScheduleDesc: '运行中 · 每日 00:05 定时执行',
+      statsAutoScheduleDesc: '运行中 · 每日 10:00:00 准时自动执行',
+      nextRefreshCountdown: '距 10:00 官方刷新倒计时',
       tableTitle: '账号签到状态与算力明细',
       colAccount: '账号 / 用户名',
       colPlan: '套餐类型',
@@ -473,6 +478,7 @@ export default function App() {
   const [loadingCheckin, setLoadingCheckin] = useState(false)
   const [claimingCheckin, setClaimingCheckin] = useState(false)
   const [claimingUid, setClaimingUid] = useState<string | null>(null)
+  const [countdownSecs, setCountdownSecs] = useState<number | null>(null)
 
   const [showAddAccountModal, setShowAddAccountModal] = useState(false)
   const [addAccountTab, setAddAccountTab] = useState<'pat' | 'batch' | 'local'>('pat')
@@ -719,6 +725,34 @@ export default function App() {
       setClaimingUid(null)
     }
   }, [authedFetch, lang, pushToast, fetchCheckinStatus])
+
+  useEffect(() => {
+    if (checkinData?.next_refresh_seconds != null) {
+      setCountdownSecs(checkinData.next_refresh_seconds)
+    }
+  }, [checkinData?.next_refresh_seconds])
+
+  useEffect(() => {
+    if (countdownSecs == null || countdownSecs <= 0) return
+    const timer = setInterval(() => {
+      setCountdownSecs((prev) => {
+        if (prev == null || prev <= 1) {
+          fetchCheckinStatus()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [countdownSecs, fetchCheckinStatus])
+
+  const formatCountdown = (secs: number | null) => {
+    if (secs == null) return '--:--:--'
+    const h = Math.floor(secs / 3600)
+    const m = Math.floor((secs % 3600) / 60)
+    const s = secs % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
 
   useEffect(() => {
     if (!token) return
@@ -1530,6 +1564,10 @@ export default function App() {
                             {t.checkin.pendingBadge}
                           </span>
                         )}
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300 shadow-sm">
+                          <span className="material-symbols-outlined text-[15px]">timer</span>
+                          <span>{t.checkin.nextRefreshCountdown}: <strong className="font-mono text-xs">{formatCountdown(countdownSecs)}</strong></span>
+                        </span>
                       </div>
                       <p className="text-body text-sm mt-2 max-w-2xl leading-relaxed">{t.checkin.desc}</p>
                     </div>
@@ -1625,11 +1663,11 @@ export default function App() {
                     </span>
                   </div>
                   <div className="text-xl font-bold text-ink flex items-center gap-2">
-                    <span>每日 00:05</span>
+                    <span>每日 10:00 (UTC+8)</span>
                     <span className="text-xs px-2 py-0.5 rounded bg-mint/20 text-ink font-bold">ACTIVE</span>
                   </div>
                   <div className="text-xs text-body mt-2">
-                    {t.checkin.statsAutoScheduleDesc}
+                    {lang === 'zh' ? `倒计时 ${formatCountdown(countdownSecs)} · 准时自动入账` : `Reset in ${formatCountdown(countdownSecs)}`}
                   </div>
                 </div>
               </section>

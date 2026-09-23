@@ -55,6 +55,8 @@ def init_db():
                 conn.execute("ALTER TABLE accounts ADD COLUMN api_enabled INTEGER DEFAULT 1")
             if "region" not in cols:
                 conn.execute("ALTER TABLE accounts ADD COLUMN region TEXT DEFAULT 'cn'")
+            if "last_checkin_cycle" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN last_checkin_cycle TEXT")
             # Sync api_mode with api_enabled for any accounts where api_enabled was set to 0
             conn.execute("UPDATE accounts SET api_mode = 'disabled' WHERE api_enabled = 0 AND (api_mode IS NULL OR api_mode = 'all')")
         except Exception:
