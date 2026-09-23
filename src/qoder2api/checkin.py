@@ -128,12 +128,29 @@ def get_checkin_status(uid: str) -> dict[str, Any]:
     return {"ok": False, "uid": uid, "name": row["name"], "error": "未知状态重试耗尽"}
 
 
-def claim_checkin(uid: str) -> dict[str, Any]:
+def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
     """为单个账号执行每日签到领取 100 Credits。"""
     with get_db() as conn:
         row = conn.execute("SELECT * FROM accounts WHERE uid = ?", (uid,)).fetchone()
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
+
+    now_sh = datetime.now(TZ_SHANGHAI)
+    if now_sh.hour < 10 and not force:
+        rem_sec = get_seconds_until_next_refresh()
+        h = rem_sec // 3600
+        m = (rem_sec % 3600) // 60
+        s = rem_sec % 60
+        return {
+            "ok": True,
+            "claimed": False,
+            "already_claimed": False,
+            "waiting_refresh": True,
+            "credits": 0,
+            "uid": uid,
+            "name": row["name"],
+            "message": f"今日签到尚未开放（每日 10:00 刷新，倒计时 {h:02d}:{m:02d}:{s:02d}），请等待 10:00 自动入账",
+        }
 
     token = (row["security_oauth_token"] or "").strip()
     if not token:
@@ -172,6 +189,7 @@ def claim_checkin(uid: str) -> dict[str, Any]:
                 "ok": True,
                 "claimed": True,
                 "already_claimed": False,
+                "waiting_refresh": False,
                 "credits": reward,
                 "uid": uid,
                 "name": row["name"],
@@ -191,6 +209,7 @@ def claim_checkin(uid: str) -> dict[str, Any]:
                 "ok": True,
                 "claimed": False,
                 "already_claimed": True,
+                "waiting_refresh": False,
                 "credits": 0,
                 "uid": uid,
                 "name": row["name"],
@@ -201,6 +220,7 @@ def claim_checkin(uid: str) -> dict[str, Any]:
             "ok": False,
             "claimed": False,
             "already_claimed": False,
+            "waiting_refresh": False,
             "uid": uid,
             "name": row["name"],
             "error": f"HTTP {r.status_code}: {r.text[:160]}",
@@ -209,12 +229,29 @@ def claim_checkin(uid: str) -> dict[str, Any]:
     return {"ok": False, "uid": uid, "name": row["name"], "error": "未知错误重试耗尽"}
 
 
-def checkin_all_accounts() -> dict[str, Any]:
+def checkin_all_accounts(force: bool = False) -> dict[str, Any]:
     """为数据库中所有启用的账号执行签到。"""
     with get_db() as conn:
         rows = conn.execute(
             "SELECT uid, name FROM accounts WHERE enabled = 1"
         ).fetchall()
+
+    now_sh = datetime.now(TZ_SHANGHAI)
+    if now_sh.hour < 10 and not force:
+        rem_sec = get_seconds_until_next_refresh()
+        h = rem_sec // 3600
+        m = (rem_sec % 3600) // 60
+        s = rem_sec % 60
+        return {
+            "total": len(rows),
+            "claimed": 0,
+            "already_claimed": 0,
+            "failed": 0,
+            "waiting_refresh": True,
+            "total_credits": 0,
+            "message": f"今日签到尚未开放（每日 10:00 刷新，倒计时 {h:02d}:{m:02d}:{s:02d}），请等待 10:00 自动执行入账",
+            "results": [],
+        }
 
     results = []
     claimed_count = 0
@@ -223,7 +260,7 @@ def checkin_all_accounts() -> dict[str, Any]:
     total_credits = 0
 
     for r in rows:
-        res = claim_checkin(r["uid"])
+        res = claim_checkin(r["uid"], force=force)
         results.append(res)
         if res.get("claimed"):
             claimed_count += 1
@@ -248,13 +285,18 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
     with get_db() as conn:
         rows = conn.execute("SELECT * FROM accounts WHERE enabled = 1").fetchall()
 
+    now_sh = datetime.now(TZ_SHANGHAI)
+    is_before_10am = (now_sh.hour < 10)
+    current_cycle = get_current_checkin_cycle()
+    next_refresh_seconds = get_seconds_until_next_refresh()
+
     accounts_detail = []
     claimed_count = 0
     pending_count = 0
+    waiting_count = 0
     total_credits_claimed_today = 0
     total_remaining_credits = 0.0
 
-    # 简单调用 status 或尝试轻量 claim 校验
     for r in rows:
         uid = r["uid"]
         name = r["name"]
@@ -307,18 +349,33 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
 
         # 2. 查询签到状态
         st = get_checkin_status(uid)
-        
-        # 判断今日是否已签到：如果调用 claim 得到 409，说明已签到；如果 status 正常也说明已签到
-        # 为最准确认定，做一次幂等轻量 claim 检查（已签到会返回 409 AlreadyExists，未签到直接顺带完成签到）
-        cl = claim_checkin(uid)
-        is_claimed = cl.get("claimed") or cl.get("already_claimed")
-        if cl.get("claimed"):
-            claimed_count += 1
-            total_credits_claimed_today += cl.get("credits", 100)
-        elif cl.get("already_claimed"):
-            claimed_count += 1
+        cl_err = None
+
+        if is_before_10am:
+            # 10:00 之前：今天的签到尚未开放，处于等待官方 10:00 刷新阶段
+            status_code = "waiting_refresh"
+            status_text = "待 10:00 刷新"
+            waiting_count += 1
+            is_claimed = False
         else:
-            pending_count += 1
+            # 10:00 之后：今日已开放签到，进行幂等检查/补签
+            cl = claim_checkin(uid)
+            is_claimed = bool(cl.get("claimed") or cl.get("already_claimed"))
+            if cl.get("claimed"):
+                claimed_count += 1
+                total_credits_claimed_today += cl.get("credits", 100)
+                status_code = "claimed"
+                status_text = "已签到 (+100)"
+            elif cl.get("already_claimed"):
+                claimed_count += 1
+                status_code = "claimed"
+                status_text = "已签到 (+100)"
+            else:
+                pending_count += 1
+                status_code = "pending"
+                status_text = "待签到"
+            if not cl.get("ok"):
+                cl_err = cl.get("error")
 
         accounts_detail.append({
             "uid": uid,
@@ -327,24 +384,27 @@ def get_all_accounts_checkin_overview() -> dict[str, Any]:
             "is_enterprise": is_enterprise,
             "plan": plan,
             "claimed_today": is_claimed,
-            "status_text": "已签到 (+100)" if is_claimed else "未签到",
+            "status_code": status_code,
+            "status_text": status_text,
             "reward_credits": st.get("reward_credits", 100) if st.get("ok") else 100,
             "streak_days": st.get("streak_days", 0) if st.get("ok") else 0,
             "total_claim_days": st.get("total_claim_days", 0) if st.get("ok") else 0,
             "quota_info": user_quota_info,
-            "error": cl.get("error") if not cl.get("ok") else None,
+            "error": cl_err,
         })
 
     return {
         "total_accounts": len(rows),
         "claimed_count": claimed_count,
         "pending_count": pending_count,
+        "waiting_count": waiting_count,
+        "is_before_10am": is_before_10am,
         "total_credits_claimed_today": total_credits_claimed_today,
         "total_remaining_credits": round(total_remaining_credits, 1),
         "accounts": accounts_detail,
         "last_auto_date": _last_auto_checkin_cycle,
-        "cycle_id": get_current_checkin_cycle(),
-        "next_refresh_seconds": get_seconds_until_next_refresh(),
+        "cycle_id": current_cycle,
+        "next_refresh_seconds": next_refresh_seconds,
         "refresh_rule": "每日 10:00 (UTC+8) 刷新，领取后 30 天有效 + 100 Credits",
     }
 

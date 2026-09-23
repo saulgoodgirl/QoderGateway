@@ -30,7 +30,10 @@ interface CheckinAccount {
   uid: string
   name: string
   plan: string
+  user_type?: string
+  is_enterprise?: boolean
   claimed_today: boolean
+  status_code?: 'waiting_refresh' | 'pending' | 'claimed'
   status_text: string
   reward_credits: number
   streak_days: number
@@ -47,6 +50,8 @@ interface CheckinOverview {
   total_accounts: number
   claimed_count: number
   pending_count: number
+  waiting_count?: number
+  is_before_10am?: boolean
   total_credits_claimed_today: number
   total_remaining_credits: number
   accounts: CheckinAccount[]
@@ -142,6 +147,10 @@ const UI_TEXT = {
       statsAutoSchedule: 'Auto Check-in Daemon',
       statsAutoScheduleDesc: 'Active · Runs daily at 10:00:00 (UTC+8)',
       nextRefreshCountdown: 'Next 10:00 Reset In',
+      waitingRefreshBadge: 'Today\'s Rewards Not Started (Wait for 10:00 UTC+8)',
+      waitingRefreshStatus: 'Pending 10:00 Reset',
+      waitingRefreshBtn: 'Wait for 10:00',
+      btnWaitAuto: 'Auto Claim at 10:00',
       tableTitle: 'Account Check-in & Credit Balance',
       colAccount: 'Account',
       colPlan: 'Plan Tier',
@@ -216,6 +225,10 @@ const UI_TEXT = {
       statsAutoSchedule: '自动签到守护',
       statsAutoScheduleDesc: '运行中 · 每日 10:00:00 准时自动执行',
       nextRefreshCountdown: '距 10:00 官方刷新倒计时',
+      waitingRefreshBadge: '今日签到尚未开启 (等待 10:00 官方刷新)',
+      waitingRefreshStatus: '待 10:00 刷新',
+      waitingRefreshBtn: '待 10:00 刷新',
+      btnWaitAuto: '待 10:00 自动入账',
       tableTitle: '账号签到状态与算力明细',
       colAccount: '账号 / 用户名',
       colPlan: '套餐类型',
@@ -1553,7 +1566,12 @@ export default function App() {
                     <div>
                       <div className="flex items-center gap-3 flex-wrap">
                         <h3 className="font-display-md text-ink">{t.checkin.bannerTitle}</h3>
-                        {((checkinData?.pending_count ?? 0) === 0 && (checkinData?.total_accounts ?? 0) > 0) ? (
+                        {checkinData?.is_before_10am ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                            <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+                            {t.checkin.waitingRefreshBadge}
+                          </span>
+                        ) : ((checkinData?.pending_count ?? 0) === 0 && (checkinData?.total_accounts ?? 0) > 0) ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                             {t.checkin.allClaimedBadge}
@@ -1583,7 +1601,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={doClaimAllCheckin}
-                      disabled={claimingCheckin || ((checkinData?.pending_count ?? 0) === 0 && (checkinData?.total_accounts ?? 0) > 0)}
+                      disabled={claimingCheckin || checkinData?.is_before_10am || ((checkinData?.pending_count ?? 0) === 0 && (checkinData?.total_accounts ?? 0) > 0)}
                       className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl transition-all font-bold text-sm shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                       {claimingCheckin ? (
@@ -1593,6 +1611,11 @@ export default function App() {
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
                           <span>{t.checkin.claiming}</span>
+                        </>
+                      ) : checkinData?.is_before_10am ? (
+                        <>
+                          <span className="material-symbols-outlined text-[20px]">schedule</span>
+                          <span>{t.checkin.btnWaitAuto}</span>
                         </>
                       ) : (
                         <>
@@ -1613,14 +1636,14 @@ export default function App() {
                     <span className="material-symbols-outlined text-base text-emerald-500">task_alt</span>
                   </div>
                   <div className="text-3xl font-bold text-ink">
-                    {checkinData?.claimed_count ?? 0}
+                    {checkinData?.is_before_10am ? 0 : (checkinData?.claimed_count ?? 0)}
                     <span className="text-base font-normal text-body ml-1">/ {checkinData?.total_accounts ?? 0}</span>
                   </div>
                   <div className="mt-3 w-full bg-hairline h-2 rounded-full overflow-hidden">
                     <div
                       className="bg-emerald-500 h-full rounded-full transition-all duration-500"
                       style={{
-                        width: `${(checkinData?.total_accounts ?? 0) > 0 ? ((checkinData?.claimed_count ?? 0) / (checkinData?.total_accounts ?? 1)) * 100 : 0}%`
+                        width: `${!checkinData?.is_before_10am && (checkinData?.total_accounts ?? 0) > 0 ? ((checkinData?.claimed_count ?? 0) / (checkinData?.total_accounts ?? 1)) * 100 : 0}%`
                       }}
                     />
                   </div>
@@ -1632,11 +1655,13 @@ export default function App() {
                     <span className="material-symbols-outlined text-base text-amber-500" style={{ fontVariationSettings: "'FILL' 1" }}>military_tech</span>
                   </div>
                   <div className="text-3xl font-bold text-amber-600">
-                    +{checkinData?.total_credits_claimed_today ?? 0}
+                    +{checkinData?.is_before_10am ? 0 : (checkinData?.total_credits_claimed_today ?? 0)}
                     <span className="text-xs font-semibold text-body ml-1 uppercase">Credits</span>
                   </div>
                   <div className="text-xs text-body mt-2">
-                    {lang === 'zh' ? '每个账号单次奖励 100 Credits' : '+100 credits per successful account'}
+                    {checkinData?.is_before_10am
+                      ? (lang === 'zh' ? '等待 10:00 刷新后自动发放' : 'Available after 10:00')
+                      : (lang === 'zh' ? '每个账号单次奖励 100 Credits' : '+100 credits per successful account')}
                   </div>
                 </div>
 
@@ -1716,14 +1741,19 @@ export default function App() {
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              {acc.claimed_today ? (
+                              {acc.status_code === 'waiting_refresh' ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                  <span className="material-symbols-outlined text-[14px]">schedule</span>
+                                  {t.checkin.waitingRefreshStatus}
+                                </span>
+                              ) : acc.claimed_today ? (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
                                   <span className="material-symbols-outlined text-[14px]">check_circle</span>
                                   {t.checkin.claimedStatus}
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                                  <span className="material-symbols-outlined text-[14px]">schedule</span>
+                                  <span className="material-symbols-outlined text-[14px]">warning</span>
                                   {t.checkin.pendingStatus}
                                 </span>
                               )}
@@ -1751,29 +1781,38 @@ export default function App() {
                               )}
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <button
-                                onClick={() => doClaimOneCheckin(acc.uid)}
-                                disabled={acc.claimed_today || claimingUid === acc.uid}
-                                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                  acc.claimed_today
-                                    ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
-                                    : 'bg-ink text-white hover:bg-neutral-800 shadow-sm cursor-pointer'
-                                }`}
-                              >
-                                {claimingUid === acc.uid ? (
-                                  <span className="inline-flex items-center gap-1">
-                                    <svg className="animate-spin h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                    </svg>
-                                    ...
-                                  </span>
-                                ) : acc.claimed_today ? (
-                                  (lang === 'zh' ? '今日已签' : 'Claimed')
-                                ) : (
-                                  t.checkin.btnClaimOne
-                                )}
-                              </button>
+                              {acc.status_code === 'waiting_refresh' ? (
+                                <button
+                                  disabled
+                                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                >
+                                  {t.checkin.waitingRefreshBtn}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => doClaimOneCheckin(acc.uid)}
+                                  disabled={acc.claimed_today || claimingUid === acc.uid}
+                                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                    acc.claimed_today
+                                      ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
+                                      : 'bg-ink text-white hover:bg-neutral-800 shadow-sm cursor-pointer'
+                                  }`}
+                                >
+                                  {claimingUid === acc.uid ? (
+                                    <span className="inline-flex items-center gap-1">
+                                      <svg className="animate-spin h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                      </svg>
+                                      ...
+                                    </span>
+                                  ) : acc.claimed_today ? (
+                                    (lang === 'zh' ? '今日已签' : 'Claimed')
+                                  ) : (
+                                    t.checkin.btnClaimOne
+                                  )}
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))
