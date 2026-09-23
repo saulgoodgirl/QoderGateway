@@ -1,14 +1,15 @@
 """
-Qoder 每日签到与积分中心模块 (Daily Check-in & Rewards)
+Qoder 每日签到与活动权益模块 (Daily Campaigns & Benefits Claim)
 
-- 接口:
-  - 状态查询: GET https://openapi.qoder.com.cn/sash/api/v1/me/daily-check-in/status
-  - 领取奖励: POST https://openapi.qoder.com.cn/sash/api/v1/me/daily-check-in/claim
+- 官方活动权益体系 (Desktop Client 10):
+  - 权益状态查询: GET https://openapi.qoder.com.cn/sash/api/v1/me/campaigns
+  - 权益福利领取: POST https://openapi.qoder.com.cn/sash/api/v1/me/campaigns/{campaign_id}/claim
 - 机制:
-  - 每次成功领取 100 Credits 算力
-  - 若已领取返回 HTTP 409 AlreadyExists
-  - 若 Token 过期返回 HTTP 401，自动刷新后重试
-  - 后台守护线程：开机自动补签，每日 00:05 定时自动为所有启用账号签到
+  - 官方每日 10:00 (UTC+8) 刷新每日福利活动 (如 act-YYYYMMDD-xxx)
+  - 成功领取官方即刻入账 +100 Credits 资源包 (30天有效)
+  - 采用 Desktop Client 请求头 (Cosy-ClientType: 10, Cosy-Version: 0.2.5, User-Agent: Qoder)
+  - 自动识别个人版 (参与每日签到) vs 企业/团队版 (免签，共享企业算力池)
+  - 后台自动守护线程：开机自动补领，每日 10:00:05 准时自动执行全账号入账
 """
 from __future__ import annotations
 
@@ -79,7 +80,19 @@ def get_seconds_until_next_refresh() -> int:
     return max(0, int((target - now_sh).total_seconds()))
 
 
-def _headers(token: str) -> dict[str, str]:
+def _headers(token: str, client_type: str = "10") -> dict[str, str]:
+    """生成请求头。
+    使用官方桌面客户端凭证标识 Cosy-ClientType: 10，方能正常获取与领取官方活动权益。
+    """
+    if str(client_type) == "10":
+        return {
+            "Authorization": f"Bearer {token.strip()}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "Qoder",
+            "Cosy-Version": "0.2.5",
+            "Cosy-ClientType": "10",
+        }
     return {
         "Authorization": f"Bearer {token.strip()}",
         "Content-Type": "application/json",
@@ -91,7 +104,9 @@ def _headers(token: str) -> dict[str, str]:
 
 
 def get_checkin_status(uid: str) -> dict[str, Any]:
-    """查询单个账号的今日签到状态与连续签到天数。"""
+    """查询单个账号的今日活动签到状态与连续签到天数。
+    对接 Qoder 官方最新 Campaigns 体系 (Cosy-ClientType: 10)。
+    """
     with get_db() as conn:
         row = conn.execute("SELECT * FROM accounts WHERE uid = ?", (uid,)).fetchone()
     if not row:
@@ -103,17 +118,15 @@ def get_checkin_status(uid: str) -> dict[str, Any]:
 
     region = row["region"] if "region" in row.keys() else "cn"
     base_api = get_openapi_url(region)
-    url = f"{base_api}/sash/api/v1/me/daily-check-in/status"
+    url = f"{base_api}/sash/api/v1/me/campaigns"
 
-    # 发起请求（支持 401 自动刷新并重试一次）
     for attempt in range(2):
         try:
-            r = httpx.get(url, headers=_headers(token), timeout=20)
+            r = httpx.get(url, headers=_headers(token, client_type="10"), timeout=20)
         except httpx.HTTPError as e:
             return {"ok": False, "uid": uid, "name": row["name"], "error": f"网络错误: {e}"}
 
         if r.status_code == 401 and attempt == 0:
-            # Token 过期，尝试刷新
             ref = refresh_one_account(uid)
             if ref.get("ok"):
                 with get_db() as conn:
@@ -131,26 +144,79 @@ def get_checkin_status(uid: str) -> dict[str, Any]:
             }
 
         data = r.json()
-        status_val = data.get("status", "UNKNOWN")
-        # 兼容：如果 status 为 DISABLED 但在今日可能已领，通过 claim 判断；
-        # 正常字段：currentStreakDays, totalClaimDays, totalRewardCredits, rewardCredits
+        campaigns = data.get("campaigns") or []
+        show_campaign = bool(data.get("showCampaign"))
+        claimable_global = bool(data.get("claimable"))
+
+        # 查找包含算力领取的活动 (如 act-20260923-076, benefit.amount=100)
+        active_camp = None
+        for c in campaigns:
+            if c.get("actionType") == "CLAIM_BENEFIT":
+                active_camp = c
+                break
+
+        current_cycle = get_current_checkin_cycle()
+        prev_cycle = row["last_checkin_cycle"] if "last_checkin_cycle" in row.keys() else None
+        local_streak = int(row["checkin_streak"] if "checkin_streak" in row.keys() and row["checkin_streak"] else 1)
+        local_total = int(row["total_claim_days"] if "total_claim_days" in row.keys() and row["total_claim_days"] else 1)
+
+        raw_u_type = str(row["user_type"] or "").lower()
+        is_ent = "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type
+
+        if not active_camp:
+            return {
+                "ok": True,
+                "uid": uid,
+                "name": row["name"],
+                "has_campaign": False,
+                "is_enterprise": is_ent,
+                "claimable": False,
+                "claimed": is_ent,  # 企业版标记免签
+                "reward_credits": 0,
+                "streak_days": local_streak if prev_cycle == current_cycle else 0,
+                "total_claim_days": local_total,
+                "raw": data,
+            }
+
+        c_status = active_camp.get("claimStatus", "UNKNOWN")
+        is_claimable = (c_status == "CLAIMABLE" or claimable_global)
+        is_claimed = (c_status == "CLAIMED")
+        benefit = active_camp.get("benefit") or {}
+        reward_credits = benefit.get("amount", 100)
+
+        # 只要官方已经 CLAIMED 或本地记录今日已签，连续签到保底至少 1 天
+        if is_claimed or prev_cycle == current_cycle:
+            display_streak = max(1, local_streak)
+            display_total = max(1, local_total)
+        else:
+            yesterday_cycle = (datetime.now(TZ_SHANGHAI) - timedelta(days=1)).strftime("%Y-%m-%d")
+            display_streak = local_streak if prev_cycle == yesterday_cycle else 0
+            display_total = local_total
+
         return {
             "ok": True,
             "uid": uid,
             "name": row["name"],
-            "status": status_val,
-            "reward_credits": data.get("rewardCredits", 100),
-            "streak_days": data.get("currentStreakDays", 0),
-            "total_claim_days": data.get("totalClaimDays", 0),
-            "total_reward_credits": data.get("totalRewardCredits", 0),
-            "raw": data,
+            "has_campaign": True,
+            "is_enterprise": False,
+            "campaign_id": active_camp.get("campaignId"),
+            "campaign_key": active_camp.get("campaignKey"),
+            "claim_status": c_status,
+            "claimable": is_claimable,
+            "claimed": is_claimed,
+            "reward_credits": reward_credits,
+            "streak_days": display_streak,
+            "total_claim_days": display_total,
+            "raw": active_camp,
         }
 
     return {"ok": False, "uid": uid, "name": row["name"], "error": "未知状态重试耗尽"}
 
 
 def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
-    """为单个账号执行每日签到领取 100 Credits。"""
+    """为单个账号执行每日签到领取 100 Credits。
+    优先调用官方真实活动权益接口: POST /sash/api/v1/me/campaigns/{campaign_id}/claim
+    """
     with get_db() as conn:
         row = conn.execute("SELECT * FROM accounts WHERE uid = ?", (uid,)).fetchone()
     if not row:
@@ -179,16 +245,32 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
 
     region = row["region"] if "region" in row.keys() else "cn"
     base_api = get_openapi_url(region)
-    url = f"{base_api}/sash/api/v1/me/daily-check-in/claim"
+    campaigns_url = f"{base_api}/sash/api/v1/me/campaigns"
 
+    current_cycle = get_current_checkin_cycle()
+    prev_cycle = row["last_checkin_cycle"] if "last_checkin_cycle" in row.keys() else None
+    yesterday_cycle = (datetime.now(TZ_SHANGHAI) - timedelta(days=1)).strftime("%Y-%m-%d")
+    old_streak = int(row["checkin_streak"] if "checkin_streak" in row.keys() and row["checkin_streak"] else 0)
+    old_total = int(row["total_claim_days"] if "total_claim_days" in row.keys() and row["total_claim_days"] else 0)
+
+    if prev_cycle == current_cycle:
+        new_streak = max(1, old_streak)
+        new_total = max(1, old_total)
+    elif prev_cycle == yesterday_cycle:
+        new_streak = old_streak + 1
+        new_total = old_total + 1
+    else:
+        new_streak = 1
+        new_total = max(1, old_total + 1)
+
+    # 1. 尝试通过 Campaigns 权益体系领取
     for attempt in range(2):
         try:
-            r = httpx.post(url, headers=_headers(token), json={}, timeout=20)
+            r = httpx.get(campaigns_url, headers=_headers(token, client_type="10"), timeout=20)
         except httpx.HTTPError as e:
             return {"ok": False, "uid": uid, "name": row["name"], "error": f"网络错误: {e}"}
 
         if r.status_code == 401 and attempt == 0:
-            # Token 过期，自动刷新
             ref = refresh_one_account(uid)
             if ref.get("ok"):
                 with get_db() as conn:
@@ -197,49 +279,31 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                 continue
             return {"ok": False, "uid": uid, "name": row["name"], "error": f"Token 过期且刷新失败: {ref.get('error')}"}
 
-        current_cycle = get_current_checkin_cycle()
-        prev_cycle = row["last_checkin_cycle"] if "last_checkin_cycle" in row.keys() else None
-        yesterday_cycle = (datetime.now(TZ_SHANGHAI) - timedelta(days=1)).strftime("%Y-%m-%d")
-        old_streak = int(row["checkin_streak"] if "checkin_streak" in row.keys() and row["checkin_streak"] else 0)
-        old_total = int(row["total_claim_days"] if "total_claim_days" in row.keys() and row["total_claim_days"] else 0)
+        if r.status_code != 200:
+            return {"ok": False, "uid": uid, "name": row["name"], "error": f"HTTP {r.status_code}: {r.text[:160]}"}
 
-        if prev_cycle == current_cycle:
-            new_streak = max(1, old_streak)
-            new_total = max(1, old_total)
-        elif prev_cycle == yesterday_cycle:
-            new_streak = old_streak + 1
-            new_total = old_total + 1
-        else:
-            new_streak = 1
-            new_total = max(1, old_total + 1)
+        camp_data = r.json()
+        campaigns = camp_data.get("campaigns") or []
 
-        if r.status_code == 200:
-            data = r.json()
-            reward = data.get("rewardCredits", 100)
+        claim_targets = []
+        already_claimed_targets = []
+        for c in campaigns:
+            if c.get("actionType") == "CLAIM_BENEFIT":
+                c_id = c.get("campaignId")
+                c_status = c.get("claimStatus")
+                if (c_status == "CLAIMABLE" or camp_data.get("claimable")) and c_id:
+                    claim_targets.append(c)
+                elif c_status == "CLAIMED":
+                    already_claimed_targets.append(c)
+
+        if not claim_targets and already_claimed_targets:
+            # 已经全部领取了
             try:
                 with get_db() as conn:
-                    conn.execute("UPDATE accounts SET last_checkin_cycle = ?, checkin_streak = ?, total_claim_days = ? WHERE uid = ?", (current_cycle, new_streak, new_total, uid))
-            except Exception:
-                pass
-            invalidate_checkin_cache()
-            return {
-                "ok": True,
-                "claimed": True,
-                "already_claimed": False,
-                "waiting_refresh": False,
-                "credits": reward,
-                "uid": uid,
-                "name": row["name"],
-                "streak_days": new_streak,
-                "message": f"签到成功！获得 +{reward} Credits",
-                "raw": data,
-            }
-
-        if r.status_code == 409:
-            # 已经签过到了
-            try:
-                with get_db() as conn:
-                    conn.execute("UPDATE accounts SET last_checkin_cycle = ?, checkin_streak = ?, total_claim_days = ? WHERE uid = ?", (current_cycle, new_streak, new_total, uid))
+                    conn.execute(
+                        "UPDATE accounts SET last_checkin_cycle = ?, checkin_streak = ?, total_claim_days = ? WHERE uid = ?",
+                        (current_cycle, new_streak, new_total, uid)
+                    )
             except Exception:
                 pass
             invalidate_checkin_cache()
@@ -252,17 +316,60 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                 "uid": uid,
                 "name": row["name"],
                 "streak_days": new_streak,
-                "message": "今日已签到（奖励已领取）",
+                "message": "今日签到福利已领取 (+100 Credits 已在账户中)",
             }
 
+        if claim_targets:
+            total_gained = 0
+            for ct in claim_targets:
+                cid = ct["campaignId"]
+                claim_api_url = f"{base_api}/sash/api/v1/me/campaigns/{cid}/claim"
+                try:
+                    c_res = httpx.post(claim_api_url, headers=_headers(token, client_type="10"), json={}, timeout=20)
+                    if c_res.status_code == 200:
+                        c_data = c_res.json()
+                        amt = c_data.get("benefit", {}).get("amount", 100)
+                        total_gained += amt
+                    elif c_res.status_code in (400, 409):
+                        pass
+                except Exception as e:
+                    logger.warning(f"Error claiming campaign {cid} for {uid}: {e}")
+
+            if total_gained > 0 or already_claimed_targets:
+                try:
+                    with get_db() as conn:
+                        conn.execute(
+                            "UPDATE accounts SET last_checkin_cycle = ?, checkin_streak = ?, total_claim_days = ? WHERE uid = ?",
+                            (current_cycle, new_streak, new_total, uid)
+                        )
+                except Exception:
+                    pass
+                invalidate_checkin_cache()
+                return {
+                    "ok": True,
+                    "claimed": total_gained > 0,
+                    "already_claimed": total_gained == 0,
+                    "waiting_refresh": False,
+                    "credits": total_gained if total_gained > 0 else 0,
+                    "uid": uid,
+                    "name": row["name"],
+                    "streak_days": new_streak,
+                    "message": f"签到成功！官方 +{total_gained} Credits 实时到账！" if total_gained > 0 else "今日签到福利已领取",
+                }
+
+        # 如果没有 campaigns (例如企业账号)
+        raw_u_type = str(row["user_type"] or "").lower()
+        is_ent = "team" in raw_u_type or "org" in raw_u_type or "enterprise" in raw_u_type
         return {
-            "ok": False,
+            "ok": True,
             "claimed": False,
-            "already_claimed": False,
+            "already_claimed": is_ent,
             "waiting_refresh": False,
+            "credits": 0,
             "uid": uid,
             "name": row["name"],
-            "error": f"HTTP {r.status_code}: {r.text[:160]}",
+            "streak_days": new_streak if is_ent else 0,
+            "message": "企业团队账号免签，共享组织资源池" if is_ent else "当前暂无可领取的官方活动",
         }
 
     return {"ok": False, "uid": uid, "name": row["name"], "error": "未知错误重试耗尽"}
@@ -410,6 +517,7 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
         except Exception as e:
             logger.warning(f"Error parsing quota usage for {uid}: {e}")
 
+        # 检查活动签到状态
         st = get_checkin_status(uid)
         cl_err = None
 
@@ -417,26 +525,51 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             status_code = "waiting_refresh"
             status_text = "待 10:00 刷新"
             is_claimed = False
+        elif is_enterprise or st.get("is_enterprise"):
+            status_code = "claimed"
+            status_text = "企业免签"
+            is_claimed = True
         else:
-            cl = claim_checkin(uid)
-            is_claimed = bool(cl.get("claimed") or cl.get("already_claimed"))
-            if cl.get("claimed") or cl.get("already_claimed"):
+            if st.get("claimable"):
+                # 自动替用户领取入账，无需用户手动操作！
+                cl = claim_checkin(uid)
+                is_claimed = bool(cl.get("claimed") or cl.get("already_claimed"))
+                status_code = "claimed" if is_claimed else "pending"
+                status_text = "已签到 (+100)" if is_claimed else "待签到"
+                if not cl.get("ok"):
+                    cl_err = cl.get("error")
+                # 若本次新入账 100，刷新额度展示
+                if cl.get("claimed"):
+                    try:
+                        from .tokens import get_account_quota
+                        q_res = get_account_quota(uid)
+                        if q_res.get("ok"):
+                            quota_raw = q_res.get("quota", {})
+                            uq = quota_raw.get("userQuota") or {}
+                            addon = quota_raw.get("addOnQuota") or {}
+                            plan_rem = _safe_float(uq.get("remaining"))
+                            addon_rem = _safe_float(addon.get("remaining"))
+                            rem_credits = plan_rem + addon_rem
+                            if user_quota_info:
+                                user_quota_info["remaining"] = rem_credits
+                                user_quota_info["addon_remaining"] = addon_rem
+                                user_quota_info["desc"] = f"基础套餐 {plan_rem:,.0f} + 签到加油包 {addon_rem:,.0f} Credits (30天有效)" if plan_rem > 0 else f"累计签到加油包 {addon_rem:,.0f} Credits (30天有效)"
+                    except Exception:
+                        pass
+            elif st.get("claimed"):
                 status_code = "claimed"
                 status_text = "已签到 (+100)"
+                is_claimed = True
             else:
                 status_code = "pending"
                 status_text = "待签到"
-            if not cl.get("ok"):
-                cl_err = cl.get("error")
+                is_claimed = False
 
-        official_streak = int(st.get("streak_days") or 0)
-        official_total = int(st.get("total_claim_days") or 0)
+        # 连续签到与累计签到天数显示：只要今天已领，保底至少显示 1 天
         local_streak = int(r["checkin_streak"] if "checkin_streak" in r.keys() and r["checkin_streak"] else 1)
         local_total = int(r["total_claim_days"] if "total_claim_days" in r.keys() and r["total_claim_days"] else 1)
-        
-        # 只要当前已签到，连续签到天数绝不允许为 0！官方接口遗留bug返回0时，按本地真实连签展示 (保底 1 天)
-        display_streak = official_streak if official_streak > 0 else (local_streak if is_claimed else 0)
-        display_total = official_total if official_total > 0 else (local_total if is_claimed else 0)
+        display_streak = max(1, local_streak) if (is_claimed and not is_enterprise) else (0 if not is_claimed else local_streak)
+        display_total = max(1, local_total) if (is_claimed and not is_enterprise) else (0 if not is_claimed else local_total)
 
         return {
             "uid": uid,
@@ -497,12 +630,10 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 def _checkin_loop() -> None:
     global _last_auto_checkin_cycle
-    # 开机后稍作延时（3秒）
     time.sleep(3)
     try:
         now_sh = datetime.now(TZ_SHANGHAI)
         current_cycle = get_current_checkin_cycle()
-        # 若当前时间在上午 10:00 之后，执行一次开机补签以防服务离线期间漏领
         if now_sh.hour >= 10:
             logger.info(f"[Checkin Auto] Startup run: past 10:00 AM, checking cycle {current_cycle}...")
             res = checkin_all_accounts()
@@ -521,13 +652,11 @@ def _checkin_loop() -> None:
     except Exception as e:
         logger.error(f"[Checkin Auto] Startup checkin failed: {e}")
 
-    # 循环检测：每 20 秒检查一次是否到达 10:00:00 (UTC+8) 刷新分界点
     while True:
         try:
             time.sleep(20)
             now_sh = datetime.now(TZ_SHANGHAI)
             current_cycle = get_current_checkin_cycle()
-            # 当天当前周期尚未自动执行，且当前时间在 10:00 之后
             if now_sh.hour >= 10 and _last_auto_checkin_cycle != current_cycle:
                 logger.info(f"[Checkin Auto] Triggering daily 10:00:00 (UTC+8) auto-checkin for cycle: {current_cycle}")
                 res = checkin_all_accounts()
