@@ -20,7 +20,7 @@ interface UIStatus { ready: boolean; mode: string; username: string | null; uid:
 interface KeyDetail { api_key: string; name?: string; account_uid?: string }
 interface APIConfig { auth_required: boolean; allowed_keys: string[]; allowed_keys_detail?: KeyDetail[] }
 interface Message { role: 'user' | 'assistant'; content: string }
-type TabId = 'dashboard' | 'accounts' | 'checkin' | 'playground' | 'api-keys' | 'logs' | 'register'
+type TabId = 'dashboard' | 'accounts' | 'checkin' | 'playground' | 'api-keys' | 'logs'
 type AppTabId = TabId
 type Lang = 'en' | 'zh'
 type ToastType = 'SUCCESS' | 'ERROR' | 'INFO'
@@ -68,31 +68,11 @@ interface CheckinOverview {
   refresh_rule?: string
 }
 
-
-interface RegTask {
-  stage: string
-  logs: string[]
-  result: { email: string; password: string; name: string; device: { token: string; refresh_token: string; user_id: string; expires_at: string } } | null
-  error: string | null
-  started_at: number
-}
-interface RegStatus {
-  running: boolean
-  stop_requested: boolean
-  parents: number
-  started_at: number | null
-  verification: string | null
-  stats: { success: number; failed: number; total: number }
-  active: Record<string, RegTask>
-  recent: Record<string, RegTask>
-}
-
 const NAV_ITEMS: { id: AppTabId; icon: string; label: string }[] = [
   { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
   { id: 'accounts', icon: 'account_balance_wallet', label: 'Account Pool' },
   { id: 'checkin', icon: 'card_giftcard', label: 'Daily Rewards' },
   { id: 'api-keys', icon: 'vpn_key', label: 'API Key Management' },
-  { id: 'register', icon: 'person_add', label: 'Auto Registrar' },
   { id: 'logs', icon: 'list_alt', label: 'Logs' },
 ]
 
@@ -128,13 +108,13 @@ const VERIFIED_MODELS: GatewayModelInfo[] = [
 const UI_TEXT = {
   en: {
     nav: {
-      dashboard: 'Dashboard', accounts: 'Account Pool', checkin: 'Daily Rewards', playground: 'AI Playground', apiKeys: 'API Key Management', logs: 'Logs', register: 'Auto Registrar',
+      dashboard: 'Dashboard', accounts: 'Account Pool', checkin: 'Daily Rewards', playground: 'AI Playground', apiKeys: 'API Key Management', logs: 'Logs',
     },
     breadcrumb: {
-      dashboard: 'Control Panel / Overview', accounts: 'Console / Management', checkin: 'Console / Daily Rewards', playground: 'Playground / Experiment', apiKeys: 'Administration / Security', logs: 'System / Observability', docs: 'Developer Platform / Wiki', register: 'Automation / Registrar',
+      dashboard: 'Control Panel / Overview', accounts: 'Console / Management', checkin: 'Console / Daily Rewards', playground: 'Playground / Experiment', apiKeys: 'Administration / Security', logs: 'System / Observability', docs: 'Developer Platform / Wiki',
     },
     title: {
-      dashboard: 'System Overview', accounts: 'Account Pool', checkin: 'Daily Rewards & Check-in', playground: 'AI Playground', apiKeys: 'API Management', logs: 'Service Logs', docs: 'Documentation', register: 'Auto Registrar',
+      dashboard: 'System Overview', accounts: 'Account Pool', checkin: 'Daily Rewards & Check-in', playground: 'AI Playground', apiKeys: 'API Management', logs: 'Service Logs', docs: 'Documentation',
     },
     common: { docs: 'Docs', support: 'Support', healthy: 'Healthy', offline: 'Offline', signOut: 'Sign Out', refresh: 'Refresh', add: 'Add', delete: 'Delete', copy: 'Copy' },
     dashboard: {
@@ -174,45 +154,16 @@ const UI_TEXT = {
     playground: { modelConfig: 'Model Configuration', streamResponse: 'Stream Response', systemPrompt: 'System Prompt', systemPromptPlaceholder: "Define the AI's persona...", ask: 'Ask anything...', send: 'Send', waiting: 'Waiting for response...' },
     api: { generate: 'Generate New Key', desc: 'Manage authentication keys and gateway access permissions for client requests.', gatewayAuth: 'Gateway Authentication', gatewayAuthDesc: 'Toggle API key validation for incoming /v1 requests.', systemStatus: 'System Status', activeKeys: 'Active Keys', configured: 'configured', activeAccessKeys: 'Active Access Keys', keyPlaceholder: 'Enter or paste a key...', noKeys: 'No API keys configured. Generate one above.', bestPractices: 'Security Best Practices', bestPracticesDesc: 'Do not expose API keys in client-side code. Rotate keys when they appear in logs, screenshots, or shared scripts.', securityPolicy: 'Security Policy' },
     logs: { account: 'Account', status: 'Status', range: 'Range', allAccounts: 'All Accounts', allStatuses: 'All Statuses', last24h: 'Last 24h', lastHour: 'Last hour', last7d: 'Last 7 days', noLogs: 'No logs available', noMatch: 'No logs match current filters', timestamp: 'Timestamp', level: 'Level', message: 'Message' },
-    register: {
-      desc: 'Register multiple Qoder accounts in parallel, pull device credentials and auto-save them into the pool. Browsers stay hidden in the background; each task pops to top once for human verification, then hides again — finish one, next takes its turn.',
-      start: 'Start Registration',
-      starting: 'Starting...',
-      running: 'Tasks running',
-      idle: 'Idle',
-      stageLabel: 'Stage',
-      statusLabel: 'Status',
-      logs: 'Live Logs',
-      result: 'Registration Result (auto-imported)',
-      noResult: 'No task has run yet',
-      countLabel: 'Parent Threads',
-      staggerHint: 'Each parent loops forever: 3 child tasks per batch, next batch starts automatically until you click stop',
-      stop: 'Stop Registration',
-      stopping: 'Stopping (after current batch)...',
-      stopHint: 'Stops after the current batch finishes and reports this run\'s stats',
-      verifyHint: 'Complete the human verification in the topmost browser window (slide the slider); next task takes over automatically',
-      waiting: 'Waiting for human verification',
-      task: 'Task',
-      statsLabel: 'This Run Stats',
-      success: 'Success',
-      failed: 'Failed',
-      total: 'Total',
-      activeTasks: 'Running',
-      recentTasks: 'Recent Done',
-      stage: {
-        idle: 'Idle', registering: 'Registering', waiting_slider: 'Waiting for human verification (topmost)', waiting_otp: 'Waiting for email code', device_auth: 'Device authorization', saving: 'Saving to DB', success: 'Success', failed: 'Failed',
-      },
-    },
   },
   zh: {
     nav: {
-      dashboard: '控制台', accounts: '账号池', checkin: '每日签到', playground: '调试对话', apiKeys: 'API Key 管理', logs: '服务日志', register: '自动注册机',
+      dashboard: '控制台', accounts: '账号池', checkin: '每日签到', playground: '调试对话', apiKeys: 'API Key 管理', logs: '服务日志',
     },
     breadcrumb: {
-      dashboard: '控制台 / 概览', accounts: '控制台 / 账号管理', checkin: '控制台 / 每日签到', playground: '调试 / 对话测试', apiKeys: '管理 / 安全', logs: '系统 / 日志', docs: '开发者平台 / 文档', register: '自动化 / 注册机',
+      dashboard: '控制台 / 概览', accounts: '控制台 / 账号管理', checkin: '控制台 / 每日签到', playground: '调试 / 对话测试', apiKeys: '管理 / 安全', logs: '系统 / 日志', docs: '开发者平台 / 文档',
     },
     title: {
-      dashboard: '系统概览', accounts: '账号池', checkin: '每日签到 · 积分中心', playground: '调试对话', apiKeys: 'API 管理', logs: '服务日志', docs: '文档', register: '自动注册机',
+      dashboard: '系统概览', accounts: '账号池', checkin: '每日签到 · 积分中心', playground: '调试对话', apiKeys: 'API 管理', logs: '服务日志', docs: '文档',
     },
     common: { docs: '文档', support: '支持', healthy: '正常', offline: '未就绪', signOut: '退出', refresh: '刷新', add: '添加', delete: '删除', copy: '复制' },
     dashboard: {
@@ -252,35 +203,6 @@ const UI_TEXT = {
     playground: { modelConfig: '模型配置', streamResponse: '流式响应', systemPrompt: '系统提示词', systemPromptPlaceholder: '定义模型的角色或行为...', ask: '输入要发送的内容...', send: '发送', waiting: '正在等待响应...' },
     api: { generate: '生成新 Key', desc: '管理客户端请求网关时使用的 API Key 和访问权限。', gatewayAuth: '网关 API 鉴权', gatewayAuthDesc: '控制 /v1 请求是否必须携带 API Key。', systemStatus: '系统状态', activeKeys: '可用 Key', configured: '已配置', activeAccessKeys: '已启用的 API Key', keyPlaceholder: '输入或粘贴 API Key...', noKeys: '还没有配置 API Key。请先生成并添加。', bestPractices: '安全建议', bestPracticesDesc: '不要把 API Key 写在前端代码里。如果 Key 出现在日志、截图或共享脚本中，请及时删除并重新生成。', securityPolicy: '安全策略' },
     logs: { account: '账号', status: '级别', range: '时间范围', allAccounts: '全部账号', allStatuses: '全部级别', last24h: '最近 24 小时', lastHour: '最近 1 小时', last7d: '最近 7 天', noLogs: '暂无日志', noMatch: '没有匹配当前筛选条件的日志', timestamp: '时间', level: '级别', message: '内容' },
-    register: {
-      desc: '并行注册多个 Qoder 账号并拉取 Device 凭据，成功后自动入库。浏览器平时隐藏后台，人机验证时置顶显示，划完一个自动轮到下一个。',
-      start: '开始注册',
-      starting: '启动中...',
-      running: '任务运行中',
-      idle: '空闲',
-      stageLabel: '阶段',
-      statusLabel: '状态',
-      logs: '实时日志',
-      result: '注册结果（已自动入库）',
-      noResult: '尚未运行注册任务',
-      countLabel: '母线程数',
-      staggerHint: '每个母线程无限循环：每批 3 个子任务并发，注册完一批自动开下一批，直到点击停止',
-      stop: '停止注册',
-      stopping: '停止中（当前批完成后停）...',
-      stopHint: '当前批次完成后停止，统计本次注册数',
-      verifyHint: '请在置顶的浏览器窗口中完成人机验证（滑动滑块），划完自动轮到下一个',
-      waiting: '等待人工验证',
-      task: '任务',
-      statsLabel: '本次注册统计',
-      success: '成功',
-      failed: '失败',
-      total: '总计',
-      activeTasks: '运行中任务',
-      recentTasks: '最近完成',
-      stage: {
-        idle: '空闲', registering: '正在注册', waiting_slider: '等待人机验证（已置顶）', waiting_otp: '等待邮箱验证码', device_auth: 'Device 授权中', saving: '入库中', success: '注册成功', failed: '失败',
-      },
-    },
   },
 } as const
 
@@ -455,7 +377,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTabId>(() => {
     try {
       const stored = localStorage.getItem('qodergate_active_tab') as AppTabId
-      if (stored && ['dashboard', 'accounts', 'checkin', 'api-keys', 'logs', 'register'].includes(stored)) {
+      if (stored && ['dashboard', 'accounts', 'checkin', 'api-keys', 'logs'].includes(stored)) {
         return stored
       }
     } catch {}
@@ -535,11 +457,6 @@ export default function App() {
   const [logFilterStatus, setLogFilterStatus] = useState('all')
   const [logFilterRange, setLogFilterRange] = useState('24h')
 
-  const [regStatus, setRegStatus] = useState<RegStatus | null>(null)
-  const [regStarting, setRegStarting] = useState(false)
-  const [regStopping, setRegStopping] = useState(false)
-  const [regCount, setRegCount] = useState(2)
-
   const [checkinData, setCheckinData] = useState<CheckinOverview | null>(null)
   const [loadingCheckin, setLoadingCheckin] = useState(false)
   const [claimingCheckin, setClaimingCheckin] = useState(false)
@@ -588,7 +505,6 @@ export default function App() {
     playground: t.nav.playground,
     'api-keys': t.nav.apiKeys,
     logs: t.nav.logs,
-    register: t.nav.register,
   }
   const pageMeta: Record<AppTabId, { bc: string; title: string }> = {
     dashboard: { bc: t.breadcrumb.dashboard, title: t.title.dashboard },
@@ -597,7 +513,6 @@ export default function App() {
     playground: { bc: t.breadcrumb.playground, title: t.title.playground },
     'api-keys': { bc: t.breadcrumb.apiKeys, title: t.title.apiKeys },
     logs: { bc: t.breadcrumb.logs, title: t.title.logs },
-    register: { bc: t.breadcrumb.register, title: t.title.register },
   }
 
   const loginCardRef = useRef<HTMLDivElement>(null)
@@ -686,41 +601,6 @@ export default function App() {
   const fetchLogs = useCallback(async () => {
     try { const resp = await authedFetch('/ui/logs'); const data = await resp.json(); setLogs(data) } catch { /* */ }
   }, [authedFetch])
-  const fetchRegStatus = useCallback(async () => {
-    try { const resp = await authedFetch('/ui/registrar/status'); const data = await resp.json(); setRegStatus(data) } catch { /* */ }
-  }, [authedFetch])
-  const startRegister = useCallback(async () => {
-    if (regStatus?.running) return
-    setRegStarting(true)
-    try {
-      const resp = await authedFetch('/ui/registrar/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parents: regCount }),
-      })
-      const data = await resp.json()
-      if (data.ok) {
-        pushToast('INFO', lang === 'zh' ? '注册已开始（无限循环）' : 'Registration started (looping)', lang === 'zh' ? `${data.parents} 个母线程，每个 3 子任务并发，请完成置顶的人机验证` : `${data.parents} parent threads x 3 workers, complete the topmost human verification`)
-        fetchRegStatus()
-      } else {
-        pushToast('ERROR', lang === 'zh' ? '启动失败' : 'Start failed', data.error || '')
-      }
-    } catch { pushToast('ERROR', lang === 'zh' ? '启动失败' : 'Start failed', '') } finally { setRegStarting(false) }
-  }, [authedFetch, fetchRegStatus, pushToast, regStatus?.running, lang, regCount])
-
-  const stopRegister = useCallback(async () => {
-    if (!regStatus?.running || regStopping) return
-    setRegStopping(true)
-    try {
-      const resp = await authedFetch('/ui/registrar/stop', { method: 'POST' })
-      const data = await resp.json()
-      if (data.ok) {
-        pushToast('INFO', lang === 'zh' ? '停止请求已发送' : 'Stop requested', lang === 'zh' ? '当前批次完成后停止' : 'Stops after the current batch')
-      } else {
-        pushToast('ERROR', lang === 'zh' ? '取消失败' : 'Stop failed', data.error || '')
-      }
-    } catch { pushToast('ERROR', lang === 'zh' ? '取消失败' : 'Stop failed', '') } finally { setRegStopping(false) }
-  }, [authedFetch, pushToast, regStatus?.running, regStopping, lang])
 
   const fetchCheckinStatus = useCallback(async () => {
     setLoadingCheckin(true)
@@ -830,14 +710,12 @@ export default function App() {
     // 按当前所处 Tab 按需拉取对应模块数据，杜绝首页启动直接轰炸后端签到与日志
     if (activeTab === 'checkin') fetchCheckinStatus()
     if (activeTab === 'logs') fetchLogs()
-    if (activeTab === 'register') fetchRegStatus()
 
     const si = setInterval(fetchStatus, 6000)
     const li = setInterval(() => { if (activeTab === 'logs') fetchLogs() }, 3000)
-    const ri = setInterval(() => { if (activeTab === 'register' && regStatus?.running) fetchRegStatus() }, 2000)
     const ci = setInterval(() => { if (activeTab === 'checkin') fetchCheckinStatus() }, 15000)
-    return () => { clearInterval(si); clearInterval(li); clearInterval(ri); clearInterval(ci) }
-  }, [token, activeTab, fetchStatus, fetchAccounts, fetchApiConfig, fetchLogs, fetchRegStatus, fetchCheckinStatus, regStatus?.running])
+    return () => { clearInterval(si); clearInterval(li); clearInterval(ci) }
+  }, [token, activeTab, fetchStatus, fetchAccounts, fetchApiConfig, fetchLogs, fetchCheckinStatus])
 
   useEffect(() => { if (activeTab === 'logs') logEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [logs, activeTab])
   useEffect(() => { if (activeTab === 'playground') chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [chatMessages, activeTab])
@@ -2527,130 +2405,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ─── AUTO REGISTRAR ─── */}
-          {activeTab === 'register' && (
-            <div className="space-y-6">
-              <div className="relative z-[4000] flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-white/60 backdrop-blur-md border border-hairline rounded-2xl">
-                <div>
-                  <h2 className="text-lg font-semibold text-ink">{t.title.register}</h2>
-                  <p className="text-sm text-body mt-1 max-w-2xl">{t.register.desc}</p>
-                  <p className="text-xs text-body opacity-70 mt-1">{t.register.staggerHint}</p>
-                </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-ink">{t.register.countLabel}</span>
-                    <div className="flex bg-white border border-hairline rounded-xl p-1 gap-1">
-                      {[1, 2, 3, 4].map(n => (
-                        <button
-                          key={n}
-                          onClick={() => setRegCount(n)}
-                          disabled={regStatus?.running}
-                          className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${regCount === n ? 'bg-ink text-white' : 'text-body hover:bg-black/5'}`}
-                        >{n}</button>
-                      ))}
-                    </div>
-                  </div>
-                  {regStatus?.running ? (
-                    <button
-                      onClick={stopRegister}
-                      disabled={regStopping || regStatus?.stop_requested}
-                      className={`h-11 px-6 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm ${regStopping || regStatus?.stop_requested ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
-                    >
-                      <span className="material-symbols-outlined text-sm">stop_circle</span>
-                      <span>{regStopping ? t.register.stopping : regStatus?.stop_requested ? t.register.stopping : t.register.stop}</span>
-                    </button>
-                  ) : (
-                    <button
-                      onClick={startRegister}
-                      disabled={regStarting}
-                      className={`h-11 px-6 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm font-bold text-sm ${regStarting ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed' : 'bg-ink text-white hover:bg-neutral-800'}`}
-                    >
-                      <span className="material-symbols-outlined text-sm">person_add</span>
-                      <span>{regStarting ? t.register.starting : t.register.start}</span>
-                    </button>
-                  )}
-                </div>
-              </div>
 
-              {regStatus?.verification && regStatus?.running && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800 flex items-center gap-2 animate-pulse">
-                  <span className="material-symbols-outlined text-base">touch_app</span>
-                  <span>{t.register.verifyHint}（{t.register.task} {regStatus.verification}）</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="p-6 bg-white/60 backdrop-blur-md border border-hairline rounded-2xl">
-                  <label className="text-[11px] font-semibold text-body uppercase opacity-60 tracking-wider">{t.register.statsLabel}</label>
-                  <div className="mt-2 text-3xl font-bold text-ink">{regStatus?.stats?.total ?? 0}</div>
-                </div>
-                <div className="p-6 bg-white/60 backdrop-blur-md border border-hairline rounded-2xl">
-                  <label className="text-[11px] font-semibold text-emerald-600 uppercase opacity-80 tracking-wider">{t.register.success}</label>
-                  <div className="mt-2 text-3xl font-bold text-emerald-600">{regStatus?.stats?.success ?? 0}</div>
-                </div>
-                <div className="p-6 bg-white/60 backdrop-blur-md border border-hairline rounded-2xl">
-                  <label className="text-[11px] font-semibold text-red-600 uppercase opacity-80 tracking-wider">{t.register.failed}</label>
-                  <div className="mt-2 text-3xl font-bold text-red-600">{regStatus?.stats?.failed ?? 0}</div>
-                </div>
-                <div className="p-6 bg-white/60 backdrop-blur-md border border-hairline rounded-2xl">
-                  <label className="text-[11px] font-semibold text-body uppercase opacity-60 tracking-wider">{lang === 'zh' ? '启动时间' : 'Started At'}</label>
-                  <div className="mt-2 font-mono text-sm text-ink">{regStatus?.started_at ? new Date(regStatus.started_at * 1000).toLocaleTimeString() : '—'}</div>
-                </div>
-              </div>
-
-              {(() => {
-                const allTasks = { ...(regStatus?.active || {}), ...(regStatus?.recent || {}) }
-                const entries = Object.entries(allTasks)
-                if (entries.length === 0) {
-                  return <div className="p-10 text-center text-sm text-body bg-white/60 backdrop-blur-md border border-hairline rounded-2xl">{t.register.noResult}</div>
-                }
-                return entries.map(([tid, task]) => {
-                  const stageText = (t.register.stage as Record<string, string>)[task.stage] || task.stage
-                  const isVerify = regStatus?.verification === tid
-                  const isActive = !!regStatus?.active?.[tid]
-                  return (
-                    <div key={tid} className={`relative z-0 bg-white/80 backdrop-blur-xl border rounded-2xl overflow-hidden ${isVerify ? 'border-amber-400 ring-2 ring-amber-200' : 'border-hairline'}`}>
-                      <div className="px-6 py-4 border-b border-hairline flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-semibold text-ink">{t.register.task} {tid}</span>
-                          <span className={`px-2 py-1 rounded text-[11px] font-bold uppercase ${task.stage === 'success' ? 'bg-emerald-100 text-emerald-700' : task.stage === 'failed' ? 'bg-red-50 text-red-700' : task.stage === 'waiting_slider' ? 'bg-amber-100 text-amber-700' : 'bg-neutral-100 text-neutral-600'}`}>{stageText}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-body font-mono">
-                          <span className={`h-2.5 w-2.5 rounded-full inline-block ${isActive ? (task.stage === 'success' ? 'bg-emerald-500' : task.stage === 'failed' ? 'bg-red-500' : 'bg-amber-400 animate-pulse') : 'bg-neutral-300'}`} />
-                          <span>{task.started_at ? new Date(task.started_at * 1000).toLocaleTimeString() : ''}</span>
-                        </div>
-                      </div>
-                      <div className="p-6 h-48 overflow-y-auto font-mono text-[13px] leading-relaxed text-ink opacity-80 space-y-1">
-                        {task.logs.slice().reverse().map((line, i) => (
-                          <div key={i} className={`break-all ${/FAILED|ERROR/i.test(line) ? 'text-red-600' : ''}`}>{line}</div>
-                        ))}
-                      </div>
-                      {task.result && (
-                        <div className="px-6 pb-6 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm border-t border-hairline">
-                          {[
-                            { label: lang === 'zh' ? '邮箱' : 'Email', value: task.result.email },
-                            { label: lang === 'zh' ? '密码' : 'Password', value: task.result.password },
-                            { label: lang === 'zh' ? '姓名' : 'Name', value: task.result.name },
-                            { label: 'Token (dt-)', value: task.result.device.token },
-                            { label: 'Refresh (drt-)', value: task.result.device.refresh_token },
-                            { label: 'UID', value: task.result.device.user_id },
-                          ].map((f, i) => (
-                            <div key={i}>
-                              <div className="text-[11px] font-semibold text-body uppercase opacity-60 tracking-wider">{f.label}</div>
-                              <div className="mt-1 font-mono text-ink break-all">{f.value}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {task.error && (
-                        <div className="px-6 pb-6 text-sm text-red-700">{task.error}</div>
-                      )}
-                    </div>
-                  )
-                })
-              })()}
-            </div>
-          )}
         </div>
       </main>
 
