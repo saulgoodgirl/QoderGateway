@@ -23,3 +23,12 @@ scripts/*.png
 # qodergate-register 导出凭据
 accounts.json
 qodergate-register/accounts.json
+
+# 本地对话记忆与私有运维工件（绝对禁止提交至公网开源仓库）
+MEMORY.md
+GLOBAL_MEMORY.md
+.deploy_cache.json
+*_preview.html
+*.log
+.agents/
+.gemini/

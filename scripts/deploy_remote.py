@@ -7,15 +7,32 @@ import argparse
 import paramiko
 from pathlib import Path
 
-REMOTE_HOST = '35.212.220.77'
-REMOTE_PORT = 22
-REMOTE_USER = 'root'
-REMOTE_PASS = '826525931'
-REMOTE_DIR = '/root/qodergateway'
-
 LOCAL_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_SRC = LOCAL_ROOT / 'src' / 'qoder2api'
 CACHE_FILE = LOCAL_ROOT / '.deploy_cache.json'
+
+def load_dotenv():
+    env_path = LOCAL_ROOT / '.env'
+    if env_path.exists():
+        try:
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        k, v = line.split('=', 1)
+                        k, v = k.strip(), v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+load_dotenv()
+
+REMOTE_HOST = os.getenv('DEPLOY_HOST') or os.getenv('REMOTE_HOST')
+REMOTE_PORT = int(os.getenv('DEPLOY_PORT') or os.getenv('REMOTE_PORT') or '22')
+REMOTE_USER = os.getenv('DEPLOY_USER') or os.getenv('REMOTE_USER') or 'root'
+REMOTE_PASS = os.getenv('DEPLOY_PASS') or os.getenv('REMOTE_PASS') or ''
+REMOTE_DIR = os.getenv('DEPLOY_DIR') or os.getenv('REMOTE_DIR') or '/root/qodergateway'
 
 def compute_md5(file_path: Path) -> str:
     h = hashlib.md5()
@@ -57,6 +74,10 @@ def main():
     print("=" * 60, flush=True)
     print(">> QODERGATEWAY Lightning Fast Deployer (Hash Cache + Fast Restart)", flush=True)
     print("=" * 60, flush=True)
+
+    if not REMOTE_HOST or not REMOTE_PASS:
+        print("[ERROR] Please configure DEPLOY_HOST and DEPLOY_PASS in .env file or environment variables.", flush=True)
+        sys.exit(1)
 
     current_hashes = get_local_hashes()
     cached_hashes = {} if args.all else load_cache()

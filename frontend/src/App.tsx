@@ -2125,6 +2125,11 @@ export default function App() {
                   ? accountsConfig.accounts.find(a => a.uid === activeKeyDetail.account_uid)
                   : null
 
+                const apiBaseUrl = typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost:5173')
+                  ? `${window.location.origin}/v1`
+                  : 'http://localhost:5050/v1';
+                const chatEndpoint = `${apiBaseUrl}/chat/completions`;
+
                 const copyAllModelsText = () => {
                   const allIds = VERIFIED_MODELS.map(m => m.id).join(', ')
                   navigator.clipboard.writeText(allIds)
@@ -2132,7 +2137,7 @@ export default function App() {
                 }
 
                 const copyCurlCommand = () => {
-                  const cmd = `curl https://lite.bigbob.asia/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${activeKey || 'YOUR_API_KEY'}" \\\n  -d '{"model": "kimi-k3", "messages": [{"role": "user", "content": "你好"}]}'`
+                  const cmd = `curl ${chatEndpoint} \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer ${activeKey || 'YOUR_API_KEY'}" \\\n  -d '{"model": "kimi-k3", "messages": [{"role": "user", "content": "你好"}]}'`
                   navigator.clipboard.writeText(cmd)
                   pushToast('INFO', lang === 'zh' ? '已复制 cURL 示例' : 'Copied cURL', lang === 'zh' ? '已将完整请求命令写入剪贴板' : 'cURL command copied')
                 }
@@ -2207,14 +2212,14 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
-                            value="https://lite.bigbob.asia/v1"
+                            value={apiBaseUrl}
                             readOnly
                             className="w-full h-10 bg-white border border-hairline rounded-lg px-3 text-xs font-mono text-ink outline-none select-all"
                           />
                           <button
                             onClick={() => {
-                              navigator.clipboard.writeText('https://lite.bigbob.asia/v1')
-                              pushToast('INFO', lang === 'zh' ? '已复制 Base URL' : 'Copied Base URL', 'https://lite.bigbob.asia/v1')
+                              navigator.clipboard.writeText(apiBaseUrl)
+                              pushToast('INFO', lang === 'zh' ? '已复制 Base URL' : 'Copied Base URL', apiBaseUrl)
                             }}
                             className="h-10 px-3.5 bg-ink text-white hover:bg-neutral-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors shrink-0 cursor-pointer"
                           >
@@ -2226,13 +2231,13 @@ export default function App() {
                           <span className="opacity-60">{lang === 'zh' ? '完整对话端点:' : 'Endpoint:'}</span>
                           <span
                             onClick={() => {
-                              navigator.clipboard.writeText('https://lite.bigbob.asia/v1/chat/completions')
-                              pushToast('INFO', lang === 'zh' ? '已复制端点' : 'Copied Endpoint', 'https://lite.bigbob.asia/v1/chat/completions')
+                              navigator.clipboard.writeText(chatEndpoint)
+                              pushToast('INFO', lang === 'zh' ? '已复制端点' : 'Copied Endpoint', chatEndpoint)
                             }}
                             className="text-ink font-semibold select-all hover:underline cursor-pointer"
                             title="点击复制完整端点"
                           >
-                            https://lite.bigbob.asia/v1/chat/completions
+                            {chatEndpoint}
                           </span>
                         </div>
                       </div>
