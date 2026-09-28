@@ -305,6 +305,34 @@ class BridgeDelta:
         return not self.role and not self.content and not self.tool_calls
 
 
+_ERROR_KEYS = ("code", "errorCode", "error")
+
+
+def detect_upstream_error(payload_text: str) -> str:
+    """上游载荷若为错误体（含 code/error/errorCode 且无可用 choices/body）→ 返回 '{code} {message}'（限长 300）；否则返回 ''。"""
+    try:
+        obj = json.loads(payload_text)
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(obj, dict):
+        return ""
+    has_body = bool(obj.get("body"))
+    has_choices = isinstance(obj.get("choices"), list) and any(
+        isinstance(c, dict) and c.get("delta") for c in obj["choices"]
+    )
+    if has_body or has_choices:
+        return ""
+    # 按 design 以 truthy 的 code/error/errorCode 判定错误体：若上游出现 {"code":200,...} 这类
+    # 非错误包装帧同样按错误事件上抛（当前协议证据中无此形态，属设计接受的取舍）。
+    for key in _ERROR_KEYS:
+        val = obj.get(key)
+        if val:
+            code = obj.get("code") or obj.get("errorCode") or (val if isinstance(val, str) else "")
+            message = obj.get("message") or obj.get("errorMessage") or (val.get("message") if isinstance(val, dict) else "")
+            return f"{code} {message}".strip()[:300]
+    return ""
+
+
 def extract_delta(data_line: str) -> BridgeDelta:
     try:
         obj = json.loads(data_line)
@@ -411,6 +439,7 @@ async def stream_openai_response(req: dict[str, Any], sess: SessionContext) -> A
     pending = ""
     streaming_text = False
     pending_role = "assistant"
+    reasoning_events = 0
 
     def event(payload: dict[str, Any]) -> str:
         return f"data: {json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}\n\n"
@@ -418,8 +447,16 @@ async def stream_openai_response(req: dict[str, Any], sess: SessionContext) -> A
     async for line in qoder_stream_lines(sess, body, model):
         if not line.startswith("data:"):
             continue
-        delta = extract_delta(line[5:].strip())
+        payload_text = line[5:].strip()
+        # 上游带内错误事件（event: error 的载荷 / 通用错误体）→ 抛错上抛，由 app.py 的重试/轮换接管
+        err = detect_upstream_error(payload_text)
+        if err:
+            raise RuntimeError(f"上游错误事件: {err}")
+        delta = extract_delta(payload_text)
         if delta.is_empty:
+            # 统计被丢弃的事件（reasoning 等），仅计数不入流，用于零正文错误的可观测性
+            if payload_text and payload_text != "[DONE]" and "reasoning_content" in payload_text:
+                reasoning_events += 1
             continue
         if delta.role:
             pending_role = delta.role
@@ -470,7 +507,11 @@ async def stream_openai_response(req: dict[str, Any], sess: SessionContext) -> A
         yield event(make_chunk(chunk_id, created, model, {"tool_calls": indexed, "role": pending_role} if not emitted else {"tool_calls": indexed}))
     elif pending:
         yield event(make_chunk(chunk_id, created, model, {"content": pending, "role": pending_role} if not emitted else {"content": pending}))
+        emitted = True  # 该分支同样向客户端下发了正文块，零正文守卫不得在其后触发
 
+    # 零正文守卫：上游只回 role/reasoning 事件（或整条流无正文）时，不得伪装成 200 空流
+    if not emitted and not tool_calls.calls:
+        raise RuntimeError(f"上游未产出正文（reasoning-only 空流，reasoning_events={reasoning_events}），请重试")
     finish_reason = "tool_calls" if tool_calls.calls else "stop"
     yield event(make_chunk(chunk_id, created, model, {}, finish_reason))
     yield "data: [DONE]\n\n"
