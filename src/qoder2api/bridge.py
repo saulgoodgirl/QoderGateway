@@ -274,9 +274,15 @@ def build_qoder_body(req: dict[str, Any], sess: SessionContext) -> tuple[dict[st
     messages = req.get("messages") if isinstance(req.get("messages"), list) else []
     tools_enabled = bool(req.get("tools"))
     rid = str(uuid.uuid4())
+    # R6：assistant 工具调用轮次的 content:null 属 OpenAI 允许形态，但上游会拒绝整个请求，
+    # 统一规范化为空字符串（任意角色、含缺省 content；list/dict content 不动；不动原请求对象）。
+    cleaned = copy.deepcopy(messages or [])
+    for message in cleaned:
+        if isinstance(message, dict) and message.get("content") is None:
+            message["content"] = ""
     body: dict[str, Any] = {
         "model": model,
-        "messages": copy.deepcopy(messages or []),
+        "messages": cleaned,
         "stream": True,
         "stream_options": {"include_usage": True},
         "metadata": {
@@ -309,26 +315,49 @@ _ERROR_KEYS = ("code", "errorCode", "error")
 
 
 def detect_upstream_error(payload_text: str) -> str:
-    """上游载荷若为错误体（含 code/error/errorCode 且无可用 choices/body）→ 返回 '{code} {message}'（限长 300）；否则返回 ''。"""
+    """上游载荷若为错误体（含 code/error/errorCode 且无可用 choices）→ 返回 '{code} {message}'（限长 300）；否则返回 ''。
+
+    包裹型帧（`body` 字符串）先解包再判定：实测 provider_error 的错误对象被序列化在 body 里；
+    `details` 字符串内嵌 `{"error":{"message":...}}` 时追加上报。
+    """
     try:
         obj = json.loads(payload_text)
     except (TypeError, ValueError):
         return ""
     if not isinstance(obj, dict):
         return ""
-    has_body = bool(obj.get("body"))
-    has_choices = isinstance(obj.get("choices"), list) and any(
-        isinstance(c, dict) and c.get("delta") for c in obj["choices"]
+    # 含 body 字符串的帧：能解出 dict 则以解包对象判定，否则沿用外层对象
+    target = obj
+    inner = obj.get("body")
+    if isinstance(inner, str) and inner:
+        try:
+            parsed_inner = json.loads(inner)
+        except (TypeError, ValueError):
+            parsed_inner = None
+        if isinstance(parsed_inner, dict):
+            target = parsed_inner
+    has_choices = isinstance(target.get("choices"), list) and any(
+        isinstance(c, dict) and c.get("delta") for c in target["choices"]
     )
-    if has_body or has_choices:
+    if has_choices:
         return ""
     # 按 design 以 truthy 的 code/error/errorCode 判定错误体：若上游出现 {"code":200,...} 这类
     # 非错误包装帧同样按错误事件上抛（当前协议证据中无此形态，属设计接受的取舍）。
     for key in _ERROR_KEYS:
-        val = obj.get(key)
+        val = target.get(key)
         if val:
-            code = obj.get("code") or obj.get("errorCode") or (val if isinstance(val, str) else "")
-            message = obj.get("message") or obj.get("errorMessage") or (val.get("message") if isinstance(val, dict) else "")
+            code = target.get("code") or target.get("errorCode") or (val if isinstance(val, str) else "")
+            message = target.get("message") or target.get("errorMessage") or (val.get("message") if isinstance(val, dict) else "")
+            details = target.get("details")
+            if isinstance(details, str) and details:
+                try:
+                    parsed_details = json.loads(details)
+                except (TypeError, ValueError):
+                    parsed_details = None
+                if isinstance(parsed_details, dict):
+                    detail_error = parsed_details.get("error")
+                    if isinstance(detail_error, dict) and detail_error.get("message"):
+                        message = f"{message} {detail_error['message']}".strip()
             return f"{code} {message}".strip()[:300]
     return ""
 
