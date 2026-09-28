@@ -226,3 +226,17 @@ data: {"code":"invalid_model_error","message":"Unsupported model \"dfmodel\"","r
 **推理-only 收流**（企业实例 + 80k 大输入，间歇 ~1/8）：上游连续输出 `reasoning_content` 增量（一次命中 103 条）后，以 `{"delta":{"content":""},"finish_reason":"stop"}` + `usage.completion_tokens=100` 正常收尾，全程无 `content`。重试可能成功（间歇性）。
 
 **首字节特性**：推理阶段上游不产出 `content`，网关亦不转发（老版 SSE 路径实测首字节 0.8~6.7s 取决于推理时长）——对首字节超时敏感的客户端/代理会误判"无响应"。
+
+### 11.1 `content:null` 请求级拒绝（2026-09-28 二次实测，100% 复现）
+
+messages 中出现 `role=assistant` 且 `content=null`（伴随 `tool_calls`）时，上游**生成前**即拒绝整个请求（HTTP 200 + 带内错误），错误对象被**包在 `body` 字符串里**：
+
+```
+data:{"headers":{"Content-Type":["application/json"]},"body":"{\"code\":\"provider_error\",\"message\":\"Error in upstream response\",\"details\":\"{\\\"error\\\":{\\\"message\\\":\\\"Messages with role 'tool' must be a response to a preceding message with 'tool_calls'...\\\",\\\"type\\\":\\\"invalid_request_error\\\",...}}\"}"}
+event:error
+```
+
+- `content:null` + `tool_calls` 是 OpenAI 兼容规范允许的形态（OpenCode/OpenChamber 等 agent harness 的"只调工具"轮次），**必须网关侧规范化**（`None → ""`）后再透传；
+- 任一条残留即整会话持续失败（与长度/位置无关）；全部规范化后即恢复；
+- 该帧无 `choices`、无 `usage`（生成前拒绝）。
+
