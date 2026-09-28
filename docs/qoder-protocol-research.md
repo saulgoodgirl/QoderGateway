@@ -206,3 +206,23 @@ const _$d = (s, k = "syJkkdK5Dxwd") => {
 - [ ] QoderGateway 增加新版协议适配：`bridge.py` 新增 `api2-v2.qoder.sh/model/v1/chat/completions` 路径（纯 Bearer，无需 COSY 签名）
 - [ ] 增加 token 自动刷新：定时/请求前检查 `expires_at`，用 `jobToken/refresh` 换新并回写数据库
 - [ ] 自动化 device flow 脚本：生成 verifier/challenge → 打印授权 URL → 轮询 poll → 拿到凭据自动入库
+
+---
+
+## 10. 企业版 VPC 部署（Qoder CN 企业私有化，qoderclicn@1.1.64）
+
+企业客户获专属 VPC 实例，官方 CLI 通过 `vpc_endpoint` / `vpcInstanceName` 路由。QoderGate 已实现
+（2026-09-28，`src/qoder2api/enterprise.py`；实现契约见 `.trellis/spec/backend/enterprise-vpc-accounts.md`）。
+
+域名规则（实例名 `{name}` 匹配 `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`）：
+
+| 公共 host | 企业派生 host |
+|---|---|
+| `openapi.qoder.com.cn` | `https://{name}-openapi.vpc.qoder.com.cn`（兑换/刷新/用户/配额） |
+| `gateway.qoder.com.cn` | `https://{name}-gateway.vpc.qoder.com.cn`（老版 COSY SSE 对话） |
+| `qoder.cn` | `https://{name}.vpc.qoder.com.cn`（门户，PAT 生成页 `/account/integrations`） |
+
+- 输入归一化：`acme` / `acme.vpc.qoder.com.cn` / `acme-{openapi,gateway}.vpc.qoder.com.cn` 均可，统一还原实例名；含点但非 vpc zone 的域名无效。
+- 接口路径与公共 CN 完全一致，仅替换 host；VPC 映射仅覆盖 gateway/openapi/base 三类端点，新版推理 host（`api2-v2.qoder.sh`）无 VPC 映射证据，故对话沿用老版 SSE。
+- TLS 为 GlobalSign 签发的 `*.vpc.qoder.com.cn` 通配符证书，网关无需额外 CA 配置。
+- 2026-09-28 对真实实例 `gffunds-qodercn` 探活：三 host 均解析；`GET /api/v1/userinfo` 返回 `TOKEN_INVALID`；假 PAT `POST /api/v1/jobToken/exchange` → 400 BadRequest；门户 `/account/integrations` → 302。
