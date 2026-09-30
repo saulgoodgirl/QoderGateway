@@ -45,6 +45,8 @@ def db_load_accounts() -> dict[str, Any]:
             u_type = str(account.get("user_type") or "").lower()
             plan_val = str(account.get("plan") or "")
             account["is_enterprise"] = (plan_val == "Teams" or "team" in u_type or "org" in u_type or "enterprise" in u_type)
+            account["provider"] = account.get("provider") or "qoder"
+            account["base_url"] = account.get("base_url") or ""
             accounts.append(account)
         active_uid = db_get_settings("active_uid")
         return {"accounts": accounts, "active_uid": active_uid}
@@ -163,6 +165,161 @@ def batch_import_accounts(records: list[dict]) -> dict:
             if active:
                 db_set_settings("active_uid", active["uid"])
     return {"imported": imported, "skipped": skipped}
+
+
+def import_local_zcode_account() -> dict[str, Any]:
+    """Reads and decrypts local ZCode credentials and registers into GETIT SQLite."""
+    from .zcode import load_local_zcode_credentials
+    creds = load_local_zcode_credentials()
+    uid = creds["uid"]
+    name = creds["name"]
+    token = creds["token"]
+    jwt = creds.get("jwt", "")
+    with get_db() as conn:
+        existing = conn.execute("SELECT enabled FROM accounts WHERE uid = ?", (uid,)).fetchone()
+        enabled = existing[0] if existing else 1
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO accounts (
+                uid, name, user_type, security_oauth_token, refresh_token, machine_id,
+                enabled, last_status, last_error, quota, is_quota_exceeded, plan,
+                user_tag, region, provider, base_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 100000000, 0, 'ZCode Free/Pro', 'BigModel', 'cn', 'zcode', '')
+            """,
+            (uid, name, "zcode_user", token, jwt, str(uuid.uuid4()), enabled),
+        )
+        if not db_get_settings("active_uid"):
+            db_set_settings("active_uid", uid)
+    return {
+        "uid": uid,
+        "name": name,
+        "provider": "zcode",
+        "enabled": bool(enabled),
+        "status": "ok",
+    }
+
+
+def add_provider_account(provider: str, uid: str, name: str, token: str, base_url: str = "") -> dict[str, Any]:
+    clean_provider = (provider or "custom").lower().strip()
+    clean_uid = uid.strip() or f"{clean_provider}_{uuid.uuid4().hex[:12]}"
+    clean_name = name.strip() or f"{clean_provider.upper()} Account"
+    clean_token = token.strip()
+    clean_base_url = base_url.strip()
+
+    with get_db() as conn:
+        existing = conn.execute("SELECT enabled FROM accounts WHERE uid = ?", (clean_uid,)).fetchone()
+        enabled = existing[0] if existing else 1
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO accounts (
+                uid, name, user_type, security_oauth_token, refresh_token, machine_id,
+                enabled, last_status, last_error, quota, is_quota_exceeded, plan,
+                user_tag, region, provider, base_url
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 100000000, 0, ?, ?, 'cn', ?, ?)
+            """,
+            (
+                clean_uid,
+                clean_name,
+                f"{clean_provider}_user",
+                clean_token,
+                "",
+                str(uuid.uuid4()),
+                enabled,
+                f"{clean_provider.upper()} Standard",
+                clean_provider.upper(),
+                clean_provider,
+                clean_base_url,
+            ),
+        )
+        if not db_get_settings("active_uid"):
+            db_set_settings("active_uid", clean_uid)
+
+    return {
+        "uid": clean_uid,
+        "name": clean_name,
+        "provider": clean_provider,
+        "base_url": clean_base_url,
+        "enabled": bool(enabled),
+        "status": "ok",
+    }
+
+
+def get_active_account_record(
+    target_account: str | list[str] | None = None,
+    preferred_provider: str | None = None,
+) -> dict[str, Any]:
+    """Finds the matching account record from database, supporting target UID/name or preferred provider."""
+    account = None
+    with get_db() as conn:
+        if isinstance(target_account, list) and len(target_account) > 0:
+            clean_uids = [str(x).strip() for x in target_account if str(x).strip()]
+            placeholders = ",".join("?" for _ in clean_uids)
+            active_uid = db_get_settings("active_uid")
+            if active_uid and active_uid in clean_uids:
+                res = conn.execute(
+                    "SELECT * FROM accounts WHERE uid = ? AND enabled = 1 AND COALESCE(api_mode, 'all') != 'disabled'",
+                    (active_uid,),
+                ).fetchone()
+                if res:
+                    account = dict(res)
+            if not account:
+                res = conn.execute(
+                    f"SELECT * FROM accounts WHERE enabled = 1 AND COALESCE(api_mode, 'all') != 'disabled' AND (uid IN ({placeholders}) OR name IN ({placeholders})) LIMIT 1",
+                    (*clean_uids, *clean_uids),
+                ).fetchone()
+                if res:
+                    account = dict(res)
+            if not account:
+                raise ValueError(f"所选的 {len(clean_uids)} 个指定账号中无可用账号。")
+        elif isinstance(target_account, str) and target_account.strip():
+            target_str = target_account.strip()
+            if target_str.lower() in ("zcode", "qoder", "custom"):
+                res = conn.execute(
+                    "SELECT * FROM accounts WHERE enabled = 1 AND COALESCE(api_mode, 'all') != 'disabled' AND LOWER(COALESCE(provider, 'qoder')) = ? LIMIT 1",
+                    (target_str.lower(),),
+                ).fetchone()
+            else:
+                res = conn.execute(
+                    "SELECT * FROM accounts WHERE enabled = 1 AND COALESCE(api_mode, 'all') != 'disabled' AND (uid = ? OR name = ? OR uid LIKE ?) LIMIT 1",
+                    (target_str, target_str, f"{target_str}%"),
+                ).fetchone()
+            if res:
+                account = dict(res)
+            else:
+                raise ValueError(f"指定的账号或厂商【{target_account}】未找到或未启用。")
+        else:
+            if preferred_provider:
+                res = conn.execute(
+                    "SELECT * FROM accounts WHERE enabled = 1 AND COALESCE(api_mode, 'all') = 'all' AND LOWER(COALESCE(provider, 'qoder')) = ? LIMIT 1",
+                    (preferred_provider.lower(),),
+                ).fetchone()
+                if res:
+                    account = dict(res)
+
+            if not account:
+                active_uid = db_get_settings("active_uid")
+                if active_uid:
+                    res = conn.execute(
+                        "SELECT * FROM accounts WHERE uid = ? AND enabled = 1 AND COALESCE(api_mode, 'all') = 'all'",
+                        (active_uid,),
+                    ).fetchone()
+                    if res:
+                        account = dict(res)
+
+            if not account:
+                res = conn.execute(
+                    "SELECT * FROM accounts WHERE enabled = 1 AND COALESCE(api_mode, 'all') = 'all' LIMIT 1"
+                ).fetchone()
+                if res:
+                    account = dict(res)
+                    db_set_settings("active_uid", account["uid"])
+
+    if not account:
+        raise ValueError("账号池中没有可供调度的有效账号。请在控制台添加或启用账号。")
+
+    account["provider"] = account.get("provider") or "qoder"
+    account["base_url"] = account.get("base_url") or ""
+    return account
 
 
 def get_active_session(target_account: str | list[str] | None = None) -> SessionContext:

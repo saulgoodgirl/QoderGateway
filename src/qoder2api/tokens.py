@@ -43,6 +43,9 @@ def refresh_one_account(uid: str) -> dict[str, Any]:
         ).fetchone()
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
+    provider = row["provider"] if "provider" in row.keys() else "qoder"
+    if provider and provider != "qoder":
+        return {"ok": True, "uid": uid, "provider": provider, "message": f"{provider} provider does not require drt refresh"}
     rt = (row["refresh_token"] or "").strip()
     if not rt:
         return {"ok": False, "uid": uid, "error": "无 refresh_token"}
@@ -106,6 +109,17 @@ def get_account_quota(uid: str) -> dict[str, Any]:
         ).fetchone()
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
+    provider = row["provider"] if "provider" in row.keys() else "qoder"
+    if provider and provider != "qoder":
+        return {
+            "ok": True,
+            "uid": uid,
+            "quota": {
+                "isQuotaExceeded": False,
+                "userQuota": {"remaining": 100000000, "total": 100000000},
+                "plan": f"{provider.upper()} Gateway Pool",
+            },
+        }
     tok = row["security_oauth_token"] or ""
     if not tok:
         return {"ok": False, "uid": uid, "error": "无 token"}

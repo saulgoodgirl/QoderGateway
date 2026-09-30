@@ -14,6 +14,7 @@ interface Account {
   last_status: string
   last_error: string | null; quota: number; is_quota_exceeded: boolean
   plan: string | null; user_tag: string | null; next_reset_at: number | null
+  provider?: string; base_url?: string
 }
 interface AccountsConfig { accounts: Account[]; active_uid: string | null }
 interface UIStatus { ready: boolean; mode: string; username: string | null; uid: string | null; user_type: string | null; error: string | null; accounts_count: number }
@@ -118,9 +119,9 @@ const UI_TEXT = {
     },
     common: { docs: 'Docs', support: 'Support', healthy: 'Healthy', offline: 'Offline', signOut: 'Sign Out', refresh: 'Refresh', add: 'Add', delete: 'Delete', copy: 'Copy' },
     dashboard: {
-      serviceStatus: 'Service Status', allGatewaysActive: 'All gateways active', noActiveSession: 'No active session', accountPool: 'Account Pool', activeSessions: 'Active Qoder accounts', apiAuth: 'API Auth', openAccess: 'Open access', activeUser: 'Active User', systemBriefing: 'System Briefing', readyBrief: 'Gateway is running. {count} account(s) are available for routing.', notReadyBrief: 'No active session is available. Import an account or add a PAT first.', recentNotifications: 'Recent Notifications', authImportError: 'Auth Import Error', sessionActive: 'Session Active', credentialConfig: 'Credential Configuration', credentialDesc: 'Add a Qoder PAT or import the current local Qoder auth session.', patPlaceholder: 'Enter Qoder PAT...', addPat: 'Add PAT', saving: 'Saving...', autoImport: 'Auto Import',
+      serviceStatus: 'Service Status', allGatewaysActive: 'All gateways active', noActiveSession: 'No active session', accountPool: 'Account Pool', activeSessions: 'Active provider accounts', apiAuth: 'API Auth', openAccess: 'Open access', activeUser: 'Active User', systemBriefing: 'System Briefing', readyBrief: 'Gateway is running. {count} account(s) are available for routing.', notReadyBrief: 'No active session is available. Import an account or add a PAT first.', recentNotifications: 'Recent Notifications', authImportError: 'Auth Import Error', sessionActive: 'Session Active', credentialConfig: 'Credential Configuration', credentialDesc: 'Add a provider credential or import local auth session.', patPlaceholder: 'Enter token or API key...', addPat: 'Add Account', saving: 'Saving...', autoImport: 'Auto Import',
     },
-    accounts: { desc: 'Manage Qoder accounts used by the gateway. Toggle "API Routing" to include/exclude accounts from external calls while keeping daily check-ins active.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add a PAT from Dashboard.', showing: 'Showing {count} account(s)' },
+    accounts: { desc: 'Manage multi-provider accounts (Qoder, ZCode, Custom) aggregated by GETIT. Toggle "API Routing" to include/exclude accounts from external calls while keeping maintenance active.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add credentials.', showing: 'Showing {count} account(s)' },
     checkin: {
       bannerTitle: 'Daily Rewards · 100 Credits Per Account',
       desc: 'Claim 100 free compute credits every day for each personal Qoder account (Enterprise/Teams accounts are excluded as they share organization resources). Resets daily at 10:00 (UTC+8), valid for 30 days. Gateway auto-worker runs daily at 10:00:05 (UTC+8) to claim automatically.',
@@ -167,9 +168,9 @@ const UI_TEXT = {
     },
     common: { docs: '文档', support: '支持', healthy: '正常', offline: '未就绪', signOut: '退出', refresh: '刷新', add: '添加', delete: '删除', copy: '复制' },
     dashboard: {
-      serviceStatus: '服务状态', allGatewaysActive: '网关可用', noActiveSession: '没有可用账号', accountPool: '账号池', activeSessions: '可参与路由的 Qoder 账号', apiAuth: 'API 鉴权', openAccess: '未开启鉴权', activeUser: '当前账号', systemBriefing: '运行状态', readyBrief: '网关正在运行，当前有 {count} 个账号可用于请求路由。', notReadyBrief: '当前没有可用会话，请先导入账号或添加 PAT。', recentNotifications: '最近状态', authImportError: '本地登录导入失败', sessionActive: '账号已连接', credentialConfig: '凭据配置', credentialDesc: '添加 Qoder PAT，或导入本机已有的 Qoder 登录会话。', patPlaceholder: '输入 Qoder PAT...', addPat: '添加 PAT', saving: '保存中...', autoImport: '自动导入',
+      serviceStatus: '服务状态', allGatewaysActive: '网关可用', noActiveSession: '没有可用账号', accountPool: '账号池', activeSessions: '可用多厂商账号', apiAuth: 'API 鉴权', openAccess: '未开启鉴权', activeUser: '当前账号', systemBriefing: '运行状态', readyBrief: '网关正在运行，当前有 {count} 个账号可用于请求路由。', notReadyBrief: '当前没有可用会话，请先导入账号或添加凭据。', recentNotifications: '最近状态', authImportError: '本地登录导入失败', sessionActive: '账号已连接', credentialConfig: '凭据配置', credentialDesc: '添加各厂商凭据，或导入本机已有的登录会话。', patPlaceholder: '输入 Token 或 API Key...', addPat: '添加账号', saving: '保存中...', autoImport: '自动导入',
     },
-    accounts: { desc: '管理网关用于请求路由和失败切换的 Qoder 账号。可单独控制账号是否参与 API 调用调度（排除调用仍享每日自动签到与令牌保活）。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击导入账号，或在控制台添加 PAT。', showing: '共 {count} 个账号' },
+    accounts: { desc: '管理 GETIT 网关聚合的多厂商账号（Qoder、智谱 ZCode、自定义模型等）。可单独控制账号是否参与通用 API 调度或定向调用，离线账号仍享受自动化保活维保。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击添加账号或导入凭据。', showing: '共 {count} 个账号' },
     checkin: {
       bannerTitle: '每日签到福利 · 每个个人账号 +100 Credits',
       desc: '每个 Qoder 个人账号每天可免费领取 100 算力 Credits（企业团队版由组织统一分配算力，不参与每日签到已自动剔除）。官方每日 10:00 (UTC+8) 准时刷新，领取后 30 天有效。网关后台守护线程将在每日 10:00:05 准时自动执行签到补领，也可随时一键为全部账号领完。',
@@ -464,10 +465,20 @@ export default function App() {
   const [countdownSecs, setCountdownSecs] = useState<number | null>(null)
 
   const [showAddAccountModal, setShowAddAccountModal] = useState(false)
-  const [addAccountTab, setAddAccountTab] = useState<'pat' | 'batch' | 'local'>('pat')
+  const [addAccountTab, setAddAccountTab] = useState<'pat' | 'zcode' | 'custom' | 'batch' | 'local'>('pat')
   const [addAccountPat, setAddAccountPat] = useState('')
   const [addAccountName, setAddAccountName] = useState('')
   const [addingAccount, setAddingAccount] = useState(false)
+
+  // Multi-provider state
+  const [providerFilter, setProviderFilter] = useState<'all' | 'qoder' | 'zcode' | 'custom'>('all')
+  const [zcodeApiKey, setZcodeApiKey] = useState('')
+  const [zcodeAccountName, setZcodeAccountName] = useState('')
+  const [customProviderName, setCustomProviderName] = useState('custom')
+  const [customBaseUrl, setCustomBaseUrl] = useState('')
+  const [customApiKey, setCustomApiKey] = useState('')
+  const [customAccountName, setCustomAccountName] = useState('')
+  const [importingZCodeLocal, setImportingZCodeLocal] = useState(false)
 
   const switchLang = (next: Lang) => {
     setLang(next)
@@ -829,6 +840,99 @@ export default function App() {
     }
   }
 
+  const handleImportZCodeLocal = async () => {
+    setImportingZCodeLocal(true)
+    try {
+      const resp = await authedFetch('/ui/accounts/zcode-import', { method: 'POST' })
+      if (!resp.ok) {
+        const err = await resp.json()
+        throw new Error(err.detail || 'ZCode local import failed')
+      }
+      const data = await resp.json()
+      pushToast('SUCCESS', lang === 'zh' ? 'ZCode 凭据已导入' : 'ZCode Imported', `成功导入账号: ${data.account?.name || 'ZCode'}`)
+      setShowAddAccountModal(false)
+      fetchAccounts()
+      fetchStatus()
+      fetchLogs()
+      fetchCheckinStatus()
+    } catch (err: any) {
+      pushToast('ERROR', lang === 'zh' ? '导入失败' : 'Import Failed', err.message)
+    } finally {
+      setImportingZCodeLocal(false)
+    }
+  }
+
+  const handleAddZCodeManual = async () => {
+    const trimmed = zcodeApiKey.trim()
+    if (!trimmed) return
+    setAddingAccount(true)
+    try {
+      const resp = await authedFetch('/ui/accounts/add-provider', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: 'zcode',
+          token: trimmed,
+          name: zcodeAccountName.trim() || 'ZCode Account',
+        }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json()
+        throw new Error(err.detail || 'ZCode add failed')
+      }
+      const data = await resp.json()
+      pushToast('SUCCESS', lang === 'zh' ? 'ZCode 账号已添加' : 'ZCode Account Added', `账号: ${data.account?.name}`)
+      setZcodeApiKey('')
+      setZcodeAccountName('')
+      setShowAddAccountModal(false)
+      fetchAccounts()
+      fetchStatus()
+      fetchLogs()
+      fetchCheckinStatus()
+    } catch (err: any) {
+      pushToast('ERROR', lang === 'zh' ? '添加失败' : 'Failed to add', err.message)
+    } finally {
+      setAddingAccount(false)
+    }
+  }
+
+  const handleAddCustomProvider = async () => {
+    const trimmedKey = customApiKey.trim()
+    const trimmedUrl = customBaseUrl.trim()
+    if (!trimmedKey || !trimmedUrl) return
+    setAddingAccount(true)
+    try {
+      const resp = await authedFetch('/ui/accounts/add-provider', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: customProviderName.trim() || 'custom',
+          token: trimmedKey,
+          base_url: trimmedUrl,
+          name: customAccountName.trim() || 'Custom Provider',
+        }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json()
+        throw new Error(err.detail || 'Custom provider add failed')
+      }
+      const data = await resp.json()
+      pushToast('SUCCESS', lang === 'zh' ? '自定义 Provider 已接入' : 'Custom Provider Added', `厂商: ${data.account?.provider}`)
+      setCustomApiKey('')
+      setCustomBaseUrl('')
+      setCustomAccountName('')
+      setShowAddAccountModal(false)
+      fetchAccounts()
+      fetchStatus()
+      fetchLogs()
+      fetchCheckinStatus()
+    } catch (err: any) {
+      pushToast('ERROR', lang === 'zh' ? '接入失败' : 'Failed to add', err.message)
+    } finally {
+      setAddingAccount(false)
+    }
+  }
+
   const handleSelectAccount = async (uid: string) => {
     try {
       const resp = await authedFetch('/ui/accounts/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid }) })
@@ -1078,8 +1182,8 @@ export default function App() {
               <div className="w-10 h-10 bg-ink rounded-lg flex items-center justify-center mb-4">
                 <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>gate</span>
               </div>
-              <h1 className="font-display-lg text-ink tracking-tight">QoderGate</h1>
-              <p className="text-[12px] font-semibold text-on-surface-variant mt-2 uppercase tracking-widest">{lang === 'zh' ? '管理控制台' : 'Management Console'}</p>
+              <h1 className="font-display-lg text-ink tracking-tight">GETIT</h1>
+              <p className="text-[12px] font-semibold text-on-surface-variant mt-2 uppercase tracking-widest">{lang === 'zh' ? '多厂商 AI 聚合网关控制台' : 'Universal Multi-Provider Gateway'}</p>
             </div>
             <form className="space-y-6" onSubmit={handleVerifyToken}>
               <div className="space-y-2">
@@ -1110,7 +1214,7 @@ export default function App() {
             </div>
           </div>
           <div className="mt-4 flex justify-between px-4 opacity-40">
-            <span className="text-[10px] tracking-widest text-ink uppercase">v2.4.0 stable</span>
+            <span className="text-[10px] tracking-widest text-ink uppercase">v3.0.0 multi-provider</span>
             <span className="text-[10px] tracking-widest text-ink uppercase">Status: Operational</span>
           </div>
         </main>
@@ -1129,7 +1233,7 @@ export default function App() {
       <aside ref={sidebarRef} className="fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-hairline flex flex-col p-6 z-50">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 bg-ink rounded-lg flex items-center justify-center"><span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>gate</span></div>
-          <div><h1 className="font-display-sm text-ink leading-none">QoderGate</h1><p className="text-[10px] uppercase tracking-widest text-body opacity-60">{lang === 'zh' ? '管理控制台' : 'Management Console'}</p></div>
+          <div><h1 className="font-display-sm text-ink leading-none">GETIT</h1><p className="text-[10px] uppercase tracking-widest text-body opacity-60">{lang === 'zh' ? '多厂商聚合网关' : 'Multi-Provider Gateway'}</p></div>
         </div>
         <nav className="flex-1 space-y-1">
           {NAV_ITEMS.map((item) => (
@@ -1222,10 +1326,10 @@ export default function App() {
                   </div>
                   <div className="mt-auto bg-ink/5 p-4 rounded-lg border border-hairline-strong" ref={terminalRef}>
                     <code className="text-sm font-mono text-ink">
-                      <span className="text-primary font-bold">system@qodergate:~$</span> status --check --all<br />
-                      <span className="term-line opacity-70">Checking nodes... [{status.ready ? 'OK' : (loading && accountsConfig.accounts.length === 0 ? 'SYNCING...' : 'FAIL')}]<br /></span>
-                      <span className="term-line opacity-70">Validating certificates... [OK]<br /></span>
-                      <span className="term-line opacity-70">Routing traffic to nearest node...</span><span className="cursor-blink">_</span>
+                      <span className="text-primary font-bold">system@getit:~$</span> status --check --all<br />
+                      <span className="term-line opacity-70">Checking upstream provider nodes... [{status.ready ? 'OK' : (loading && accountsConfig.accounts.length === 0 ? 'SYNCING...' : 'FAIL')}]<br /></span>
+                      <span className="term-line opacity-70">Multi-provider engine: [Qoder: ACTIVE] [ZCode: ACTIVE] [Custom: READY]<br /></span>
+                      <span className="term-line opacity-70">Routing traffic to optimal provider & account...</span><span className="cursor-blink">_</span>
                     </code>
                   </div>
                 </div>
@@ -1351,10 +1455,28 @@ export default function App() {
                 </section>
               )}
 
-              <section className="flex items-center gap-6">
+              <section className="flex items-center justify-between gap-4 flex-wrap">
                 <div className="relative flex-grow max-w-md group">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-body opacity-50 group-focus-within:opacity-100 transition-opacity">search</span>
                   <CustomInput value={searchAccounts} onChange={setSearchAccounts} placeholder={t.accounts.search} className="!pl-12 !py-3 !rounded-xl !bg-white/50" />
+                </div>
+                <div className="flex items-center gap-1.5 p-1 bg-surface-card border border-hairline rounded-xl text-xs font-semibold">
+                  {[
+                    { id: 'all', label: lang === 'zh' ? '全部厂商' : 'All Providers', count: accountsConfig.accounts.length },
+                    { id: 'qoder', label: 'Qoder', count: accountsConfig.accounts.filter(a => (a.provider || 'qoder') === 'qoder').length },
+                    { id: 'zcode', label: 'ZCode (智谱)', count: accountsConfig.accounts.filter(a => a.provider === 'zcode').length },
+                    { id: 'custom', label: lang === 'zh' ? '自定义' : 'Custom', count: accountsConfig.accounts.filter(a => a.provider === 'custom').length },
+                  ].map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setProviderFilter(p.id as any)}
+                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${providerFilter === p.id ? 'bg-ink text-white shadow-xs font-bold' : 'text-body hover:text-ink'}`}
+                    >
+                      <span>{p.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${providerFilter === p.id ? 'bg-white/20 text-white' : 'bg-black/5 text-body'}`}>{p.count}</span>
+                    </button>
+                  ))}
                 </div>
               </section>
 
@@ -1381,11 +1503,11 @@ export default function App() {
                         ? '在 Cursor、ZCode、NextChat、CherryStudio 等工具中，直接把模型名写为 '
                         : 'In IDEs or clients, specify model as '}
                       <code className="bg-black/5 px-1.5 py-0.5 rounded font-mono text-ink font-semibold">kimi-k3@账号名</code>
-                      {lang === 'zh' ? '（例如 ' : ' (e.g. '}
-                      <code className="bg-black/5 px-1.5 py-0.5 rounded font-mono text-ink font-semibold">kimi-k3@风思黏</code>
+                      {lang === 'zh' ? ' 或 ' : ' or '}
+                      <code className="bg-black/5 px-1.5 py-0.5 rounded font-mono text-ink font-semibold">glm-4-flash@账号名</code>
                       {lang === 'zh'
-                        ? '），网关将自动定向单独调用该账号！亦可通过专属 API Key 绑定或 Header: X-Account 触发。'
-                        : '), and the gateway directs the call to that account!'}
+                        ? '，网关将自动定向单独调用该账号！亦可通过专属 API Key 绑定或 Header: X-Account 触发。'
+                        : ', and the gateway directs the call to that account!'}
                     </div>
                     <div>
                       <strong className="text-neutral-600 font-semibold">{lang === 'zh' ? '● 专属保护模式' : '● Dedicated Mode'}：</strong>
@@ -1403,6 +1525,7 @@ export default function App() {
                     <thead className="bg-canvas-soft border-b border-hairline">
                       <tr>{[
                         lang === 'zh' ? '账号名称' : 'Account',
+                        lang === 'zh' ? '厂商' : 'Provider',
                         'UID',
                         lang === 'zh' ? '类型 / 配额' : 'Plan / Quota',
                         lang === 'zh' ? '状态' : 'Status',
@@ -1410,17 +1533,25 @@ export default function App() {
                         lang === 'zh' ? '账号总启用' : 'Enabled',
                         lang === 'zh' ? '操作' : 'Actions',
                       ].map((h, i) => (
-                        <th key={i} className={`px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider ${i === 4 || i === 5 ? 'text-center' : i === 6 ? 'text-right' : ''}`}>{h}</th>
+                        <th key={i} className={`px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider ${i === 5 || i === 6 ? 'text-center' : i === 7 ? 'text-right' : ''}`}>{h}</th>
                       ))}</tr>
                     </thead>
                     <tbody className="divide-y divide-hairline">
                       {accountsConfig.accounts.length === 0 ? (
-                        <tr><td colSpan={7} className="py-8 text-center text-xs text-body font-medium">{t.accounts.empty}</td></tr>
+                        <tr><td colSpan={8} className="py-8 text-center text-xs text-body font-medium">{t.accounts.empty}</td></tr>
                       ) : accountsConfig.accounts
-                        .filter(acc => !searchAccounts || acc.name.toLowerCase().includes(searchAccounts.toLowerCase()) || acc.uid.includes(searchAccounts))
+                        .filter(acc => {
+                          const matchesSearch = !searchAccounts || acc.name.toLowerCase().includes(searchAccounts.toLowerCase()) || acc.uid.includes(searchAccounts)
+                          const p = acc.provider || 'qoder'
+                          const matchesProvider = providerFilter === 'all' || p === providerFilter
+                          return matchesSearch && matchesProvider
+                        })
                         .map((acc) => {
                           const isActive = accountsConfig.active_uid === acc.uid
                           const currentMode = acc.api_mode || (acc.api_enabled !== false ? 'all' : 'disabled')
+                          const p = acc.provider || 'qoder'
+                          const defaultModel = p === 'zcode' ? 'glm-4-flash' : p === 'custom' ? 'custom-model' : 'kimi-k3'
+                          const targetModelName = `${defaultModel}@${acc.name}`
                           return (
                             <tr key={acc.uid} className={`hover:bg-canvas-soft transition-colors group ${isActive ? 'bg-mint/5' : ''}`}>
                               <td className="px-6 py-5 font-bold text-ink">
@@ -1436,18 +1567,35 @@ export default function App() {
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        const modelName = `kimi-k3@${acc.name}`
-                                        navigator.clipboard.writeText(modelName)
-                                        pushToast('INFO', lang === 'zh' ? '已复制定向模型名' : 'Copied Target Model', lang === 'zh' ? `在客户端输入 ${modelName} 即可单独调用该账号！` : `Use ${modelName} in clients to call this account!`)
+                                        navigator.clipboard.writeText(targetModelName)
+                                        pushToast('INFO', lang === 'zh' ? '已复制定向模型名' : 'Copied Target Model', lang === 'zh' ? `在客户端输入 ${targetModelName} 即可单独调用该账号！` : `Use ${targetModelName} in clients to call this account!`)
                                       }}
                                       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/5 hover:bg-black/10 text-ink font-mono text-[10px] transition-colors"
-                                      title={lang === 'zh' ? '点击复制定向模型名 (例如: kimi-k3@账号名)' : 'Click to copy targeted model name'}
+                                      title={lang === 'zh' ? `点击复制定向模型名 (例如: ${targetModelName})` : 'Click to copy targeted model name'}
                                     >
                                       <span className="material-symbols-outlined text-[12px]">content_copy</span>
                                       <span>@{acc.name}</span>
                                     </button>
                                   </div>
                                 </div>
+                              </td>
+                              <td className="px-6 py-5">
+                                {p === 'zcode' ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                    ZCode
+                                  </span>
+                                ) : p === 'custom' ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-800 border border-purple-200/80">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                                    Custom
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200/80">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                    Qoder
+                                  </span>
+                                )}
                               </td>
                               <td className="px-6 py-5 font-mono text-xs text-body select-all">{acc.uid}</td>
                               <td className="px-6 py-5"><div className="flex flex-col"><span className="text-xs font-semibold text-ink">{acc.user_tag || acc.plan || 'Trial'}</span><span className="text-[10px] text-body font-mono">Quota: {acc.quota}</span></div></td>
@@ -2416,8 +2564,8 @@ export default function App() {
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-hairline">
               <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-ink text-[22px]">person_add</span>
-                <h3 className="font-bold text-base text-ink">{lang === 'zh' ? '添加 Qoder 账号' : 'Add Qoder Account'}</h3>
+                <span className="material-symbols-outlined text-ink text-[22px]">hub</span>
+                <h3 className="font-bold text-base text-ink">{lang === 'zh' ? '接入模型厂商与账号' : 'Add Model Provider & Account'}</h3>
               </div>
               <button
                 onClick={() => setShowAddAccountModal(false)}
@@ -2428,28 +2576,40 @@ export default function App() {
             </div>
 
             {/* Modal Tabs */}
-            <div className="flex border-b border-hairline px-6 pt-3 gap-6 text-sm font-semibold">
+            <div className="flex border-b border-hairline px-6 pt-3 gap-5 text-sm font-semibold overflow-x-auto">
               <button
                 onClick={() => setAddAccountTab('pat')}
-                className={`pb-3 transition-colors border-b-2 ${addAccountTab === 'pat' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'pat' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
-                {lang === 'zh' ? 'PAT 令牌添加 (推荐)' : 'PAT Token (Recommended)'}
+                Qoder (PAT)
+              </button>
+              <button
+                onClick={() => setAddAccountTab('zcode')}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'zcode' ? 'border-emerald-600 text-emerald-700 font-bold' : 'border-transparent text-body hover:text-ink'}`}
+              >
+                ZCode (智谱)
+              </button>
+              <button
+                onClick={() => setAddAccountTab('custom')}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'custom' ? 'border-purple-600 text-purple-700 font-bold' : 'border-transparent text-body hover:text-ink'}`}
+              >
+                {lang === 'zh' ? '自定义厂商' : 'Custom Provider'}
               </button>
               <button
                 onClick={() => setAddAccountTab('batch')}
-                className={`pb-3 transition-colors border-b-2 ${addAccountTab === 'batch' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'batch' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
-                {lang === 'zh' ? '批量导入 (JSON)' : 'Batch JSON'}
+                {lang === 'zh' ? '批量导入' : 'Batch JSON'}
               </button>
               <button
                 onClick={() => setAddAccountTab('local')}
-                className={`pb-3 transition-colors border-b-2 ${addAccountTab === 'local' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'local' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
-                {lang === 'zh' ? '本机客户端导入' : 'Local Auth'}
+                {lang === 'zh' ? 'Qoder 本机' : 'Qoder Local'}
               </button>
             </div>
 
-            {/* Tab 1: PAT */}
+            {/* Tab 1: Qoder PAT */}
             {addAccountTab === 'pat' && (
               <div className="p-6 space-y-4">
                 <div>
@@ -2504,12 +2664,170 @@ export default function App() {
               </div>
             )}
 
-            {/* Tab 2: Batch JSON */}
-            {addAccountTab === 'batch' && (
+            {/* Tab 2: ZCode */}
+            {addAccountTab === 'zcode' && (
               <div className="p-6 space-y-4">
+                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/70 flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="font-bold text-sm text-emerald-950 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-emerald-600 text-[18px]">bolt</span>
+                      {lang === 'zh' ? '一键读取本机 ZCode 授权凭据' : 'Import Local ZCode Credentials'}
+                    </div>
+                    <p className="text-xs text-emerald-800">
+                      {lang === 'zh' ? '自动解密本机 ~/.zcode/v2/credentials.json 与 config.json 凭证' : 'Auto decrypts ~/.zcode/v2 credentials and config'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleImportZCodeLocal}
+                    disabled={importingZCodeLocal}
+                    className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shrink-0 flex items-center gap-1.5"
+                  >
+                    {importingZCodeLocal && <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>}
+                    {importingZCodeLocal ? (lang === 'zh' ? '导入中...' : 'Importing...') : (lang === 'zh' ? '本机导入' : 'Import Local')}
+                  </button>
+                </div>
+
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-hairline"></div>
+                  <span className="flex-shrink mx-3 text-body text-[11px] font-semibold">{lang === 'zh' ? '或者手动录入 API Key' : 'Or Manual Input'}</span>
+                  <div className="flex-grow border-t border-hairline"></div>
+                </div>
+
                 <div>
                   <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                    {lang === 'zh' ? '粘贴注册机导出的 JSON（accounts.json）' : 'Paste registrar JSON'}
+                    {lang === 'zh' ? 'ZCode / BigModel API Key *' : 'ZCode / BigModel API Key *'}
+                  </label>
+                  <input
+                    type="password"
+                    value={zcodeApiKey}
+                    onChange={e => setZcodeApiKey(e.target.value)}
+                    placeholder="xxxxxxxx.xxxxxxxx"
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                    {lang === 'zh' ? '账号备注 (可选)' : 'Account Alias (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={zcodeAccountName}
+                    onChange={e => setZcodeAccountName(e.target.value)}
+                    placeholder={lang === 'zh' ? '例如：ZCode 主号 / 智谱' : 'e.g. ZCode Main'}
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAccountModal(false)}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                  >
+                    {lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddZCodeManual}
+                    disabled={!zcodeApiKey.trim() || addingAccount}
+                    className="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2"
+                  >
+                    {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
+                    {lang === 'zh' ? '接入 ZCode' : 'Connect ZCode'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 3: Custom Provider */}
+            {addAccountTab === 'custom' && (
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                      {lang === 'zh' ? '厂商标识 (Provider) *' : 'Provider Tag *'}
+                    </label>
+                    <input
+                      type="text"
+                      value={customProviderName}
+                      onChange={e => setCustomProviderName(e.target.value)}
+                      placeholder="deepseek / claude / openai"
+                      className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink font-mono outline-none focus:border-ink/40 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                      {lang === 'zh' ? '账号备注 (可选)' : 'Account Alias (Optional)'}
+                    </label>
+                    <input
+                      type="text"
+                      value={customAccountName}
+                      onChange={e => setCustomAccountName(e.target.value)}
+                      placeholder="e.g. My DeepSeek"
+                      className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                    {lang === 'zh' ? 'Base URL (OpenAI 兼容端点) *' : 'Base URL *'}
+                  </label>
+                  <input
+                    type="text"
+                    value={customBaseUrl}
+                    onChange={e => setCustomBaseUrl(e.target.value)}
+                    placeholder="https://api.deepseek.com/v1"
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                    {lang === 'zh' ? 'API Key / Bearer Token *' : 'API Key *'}
+                  </label>
+                  <input
+                    type="password"
+                    value={customApiKey}
+                    onChange={e => setCustomApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAccountModal(false)}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                  >
+                    {lang === 'zh' ? '取消' : 'Cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAddCustomProvider}
+                    disabled={!customApiKey.trim() || !customBaseUrl.trim() || addingAccount}
+                    className="px-6 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2"
+                  >
+                    {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
+                    {lang === 'zh' ? '接入厂商' : 'Connect Provider'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tab 4: Batch JSON */}
+            {addAccountTab === 'batch' && (
+              <div className="p-6 space-y-4">
+                <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-900 leading-relaxed">
+                  <p className="font-semibold mb-1">⚠️ 关于自动注册机的说明：</p>
+                  <p>自动注册机（qodergate-register）由于 GUI 依赖仅限本地独立部署与运行，云端已禁用运行接口。本地跑完注册机后导出的 accounts.json 可在此直接批量粘贴导入。</p>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                    {lang === 'zh' ? '粘贴导出的 JSON（accounts.json）' : 'Paste Accounts JSON'}
                   </label>
                   <textarea
                     value={batchJson}

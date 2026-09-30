@@ -36,12 +36,12 @@ function Landing() {
           <span className="w-10 h-10 bg-ink text-white rounded-xl inline-flex items-center justify-center leading-none">
             <span className="material-symbols-outlined block leading-none" style={{ fontVariationSettings: "'FILL' 1", fontSize: 22 }}>gate</span>
           </span>
-          <span className="font-display-sm text-ink">QoderGate</span>
+          <span className="font-display-sm text-ink">GETIT</span>
         </a>
         <div className="flex items-center gap-3 text-sm font-bold">
           <button onClick={switchLang} className="px-4 py-2 text-body hover:text-ink transition-colors font-bold">{lang === 'zh' ? 'English' : '中文'}</button>
           <a href="/documents" className="px-4 py-2 text-body hover:text-ink transition-colors">{lang === 'zh' ? '文档' : 'Docs'}</a>
-          <a href="https://github.com/bzym2/QoderGateway" target="_blank" rel="noreferrer" className="w-10 h-10 inline-flex items-center justify-center rounded-full border border-hairline bg-white/70 text-ink hover:bg-white transition-all" aria-label="GitHub Repository">
+          <a href="https://github.com/saulgoodgirl/QoderGateway" target="_blank" rel="noreferrer" className="w-10 h-10 inline-flex items-center justify-center rounded-full border border-hairline bg-white/70 text-ink hover:bg-white transition-all" aria-label="GitHub Repository">
             <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor" aria-hidden="true">
               <path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6.01 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.49 5.93.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z" />
             </svg>
@@ -53,13 +53,13 @@ function Landing() {
       <section ref={heroRef} className="relative z-10 max-w-7xl mx-auto px-8 pt-24 pb-20">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/70 border border-hairline rounded-full text-[11px] font-bold uppercase tracking-widest text-body mb-8">
           <span className="w-2 h-2 bg-mint rounded-full animate-pulse"></span>
-          {lang === 'zh' ? 'OpenAI 兼容的 Qoder 网关' : 'OpenAI-compatible Qoder gateway'}
+          {lang === 'zh' ? '通用的多厂商 AI 聚合网关' : 'Universal Multi-Provider AI Aggregation Gateway'}
         </div>
         <h1 className="font-display-lg text-ink max-w-4xl" style={{ fontSize: 72, lineHeight: 0.98 }}>
-          {lang === 'zh' ? '把多个 Qoder 账号统一转换成 OpenAI 兼容接口。' : 'Turn multiple Qoder accounts into one OpenAI-compatible API.'}
+          {lang === 'zh' ? '把 Qoder、ZCode 等多厂商模型与账号统一聚合成标准接口。' : 'Unify Qoder, ZCode and custom AI providers into one standard API.'}
         </h1>
         <p className="mt-7 text-lg text-body max-w-2xl leading-8">
-          {lang === 'zh' ? '在本地管理账号池、API Key、服务日志和调试对话，并向客户端提供 /v1/chat/completions。' : 'Manage account pools, API keys, logs, and test chats locally while exposing /v1/chat/completions to clients.'}
+          {lang === 'zh' ? '在云端或本地统一管理多厂商账号池、API Key、每日维保打卡与实时日志，向下游客户端提供统一的 /v1/chat/completions。' : 'Manage multi-provider accounts, API keys, daily maintenance, and logs with unified /v1/chat/completions.'}
         </p>
         <div className="mt-10 flex items-center gap-4">
           <a href="/console" className="bg-ink text-white px-7 py-4 rounded-full font-bold hover:bg-primary transition-all shadow-xl">{lang === 'zh' ? '进入控制台' : 'Launch Console'}</a>

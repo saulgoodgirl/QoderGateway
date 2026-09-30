@@ -61,8 +61,13 @@ def init_db():
                 conn.execute("ALTER TABLE accounts ADD COLUMN checkin_streak INTEGER DEFAULT 1")
             if "total_claim_days" not in cols:
                 conn.execute("ALTER TABLE accounts ADD COLUMN total_claim_days INTEGER DEFAULT 1")
+            if "provider" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN provider TEXT DEFAULT 'qoder'")
+            if "base_url" not in cols:
+                conn.execute("ALTER TABLE accounts ADD COLUMN base_url TEXT DEFAULT ''")
             # Sync api_mode with api_enabled for any accounts where api_enabled was set to 0
             conn.execute("UPDATE accounts SET api_mode = 'disabled' WHERE api_enabled = 0 AND (api_mode IS NULL OR api_mode = 'all')")
+            conn.execute("UPDATE accounts SET provider = 'qoder' WHERE provider IS NULL OR provider = ''")
         except Exception:
             pass
         

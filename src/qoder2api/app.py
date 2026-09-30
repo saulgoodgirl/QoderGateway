@@ -20,6 +20,9 @@ from .accounts import (
     db_get_settings,
     db_set_settings,
     import_current_auth,
+    import_local_zcode_account,
+    add_provider_account,
+    get_active_account_record,
     get_active_session,
     rotate_next_account,
     batch_import_accounts,
@@ -38,13 +41,19 @@ from .checkin import (
     claim_checkin,
     get_all_accounts_checkin_overview,
 )
+from .zcode import (
+    forward_zcode_stream,
+    forward_zcode_complete,
+    ping_zcode_account,
+    load_local_zcode_credentials,
+)
 
 BASE_DIR = os.path.dirname(__file__)
 INDEX_HTML = Path(BASE_DIR) / "static" / "index.html"
 CONSOLE_HTML = Path(BASE_DIR) / "static" / "console.html"
 DOCS_HTML = Path(BASE_DIR) / "static" / "docs.html"
 
-app = FastAPI(title="qoder2api-python")
+app = FastAPI(title="GETIT Gateway", description="GETIT · Universal Multi-Provider AI Aggregation Gateway")
 app.mount("/assets", StaticFiles(directory=os.path.join(BASE_DIR, "static", "assets")), name="assets")
 
 
@@ -382,10 +391,9 @@ async def checkin_claim_endpoint(payload: dict[str, Any] | None = None, verify: 
 
 @app.post("/ui/registrar/start")
 async def registrar_start(payload: dict[str, Any] | None = None, verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
-    """启动注册机（无限循环：parents 个母线程 × 每批 3 个子任务，直到调用 stop）。
-
-    body 可选：{"parents": 2}  —— 母线程数（1-6），每母线程 3 子任务并发。
-    """
+    """启动注册机（仅限本地环境可用，云端已禁用）。"""
+    if not env_bool("ENABLE_REGISTRAR", False):
+        raise HTTPException(status_code=403, detail="自动注册机仅限本地部署环境运行，云端已禁用此功能。导出的 accounts.json 请通过批量导入上传。")
     payload = payload or {}
     try:
         parents = int(payload.get("parents", 2))
@@ -396,14 +404,47 @@ async def registrar_start(payload: dict[str, Any] | None = None, verify: None = 
 
 @app.post("/ui/registrar/stop")
 async def registrar_stop(verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
-    """请求停止：当前批次完成后停止，返回本次注册统计。"""
+    """请求停止注册机。"""
+    if not env_bool("ENABLE_REGISTRAR", False):
+        raise HTTPException(status_code=403, detail="自动注册机仅限本地部署环境运行，云端已禁用此功能。")
     return stop_registration()
 
 
 @app.get("/ui/registrar/status")
 async def registrar_status(verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
-    """查询注册机任务状态（stage / logs / result）。"""
+    """查询注册机任务状态。"""
+    if not env_bool("ENABLE_REGISTRAR", False):
+        return {"running": False, "stage": "disabled", "logs": ["自动注册机仅限本地独立环境运行，云端环境已禁用此功能。"]}
     return get_registrar_status()
+
+
+@app.post("/ui/accounts/zcode-import")
+async def zcode_import(verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """一键导入本机 ~/.zcode/v2/credentials.json 中已解密的 ZCode 凭据。"""
+    try:
+        res = import_local_zcode_account()
+        add_log(f"Imported local ZCode account: {res['name']} ({res['uid']})")
+        return {"status": "ok", "account": res}
+    except Exception as exc:
+        add_log(f"Failed to import local ZCode account: {exc}", "ERROR")
+        raise HTTPException(status_code=400, detail=f"导入本机 ZCode 凭据失败: {exc}")
+
+
+@app.post("/ui/accounts/add-provider")
+async def add_provider_endpoint(payload: dict[str, Any], verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """手动添加或更新指定 Provider 的账号（支持 ZCode、自定义 OpenAI 兼容接口等）。"""
+    provider = str(payload.get("provider") or "zcode").strip().lower()
+    uid = str(payload.get("uid") or "").strip()
+    name = str(payload.get("name") or "").strip()
+    token = str(payload.get("token") or payload.get("apiKey") or payload.get("api_key") or "").strip()
+    base_url = str(payload.get("base_url") or payload.get("baseUrl") or "").strip()
+
+    if not token:
+        raise HTTPException(status_code=400, detail="API Key / Token is required")
+
+    res = add_provider_account(provider=provider, uid=uid, name=name, token=token, base_url=base_url)
+    add_log(f"Added provider account: [{provider.upper()}] {res['name']} ({res['uid']})")
+    return {"status": "ok", "account": res}
 
 
 @app.get("/ui/config")
@@ -489,31 +530,37 @@ def is_account_error(exc: Exception) -> bool:
 @app.get("/v1/models")
 async def list_models():
     models_list = [
-        "kimi-k3",
-        "deepseek-v4-pro",
-        "qwen-3.8-max",
-        "glm-5.3",
-        "kimi-k2.8",
-        "deepseek-flash",
-        "qwen-3.8-flash",
-        "qwen-3.7-max",
-        "qwen-3.7-plus",
-        "qwen-3.7-flash",
-        "glm-5.3-flash",
-        "glm-5.2",
-        "auto",
-        "lite",
-        # Legacy aliases
-        "kmodel_latest", "kmodel",
-        "dmodel", "dfmodel",
-        "qmodel_38max", "qfmodel", "qmodel_latest", "qmodel", "q37fmodel",
-        "gmodel", "gfmodel", "gm51model",
+        {"id": "kimi-k3", "owned_by": "qoder"},
+        {"id": "deepseek-v4-pro", "owned_by": "qoder"},
+        {"id": "qwen-3.8-max", "owned_by": "qoder"},
+        {"id": "glm-5.3", "owned_by": "qoder"},
+        {"id": "kimi-k2.8", "owned_by": "qoder"},
+        {"id": "deepseek-flash", "owned_by": "qoder"},
+        {"id": "qwen-3.8-flash", "owned_by": "qoder"},
+        {"id": "qwen-3.7-max", "owned_by": "qoder"},
+        {"id": "qwen-3.7-plus", "owned_by": "qoder"},
+        {"id": "qwen-3.7-flash", "owned_by": "qoder"},
+        {"id": "glm-5.3-flash", "owned_by": "qoder"},
+        {"id": "glm-5.2", "owned_by": "qoder"},
+        {"id": "auto", "owned_by": "getit"},
+        {"id": "lite", "owned_by": "getit"},
+        # ZCode / BigModel models
+        {"id": "glm-4-flash", "owned_by": "zcode"},
+        {"id": "glm-4", "owned_by": "zcode"},
+        {"id": "glm-4-plus", "owned_by": "zcode"},
+        {"id": "glm-4-air", "owned_by": "zcode"},
+        {"id": "glm-4-long", "owned_by": "zcode"},
+        {"id": "codegeex-4", "owned_by": "zcode"},
+        # Universal aliases
+        {"id": "claude-3-5-sonnet", "owned_by": "getit"},
+        {"id": "gpt-4o", "owned_by": "getit"},
+        {"id": "deepseek-v3", "owned_by": "getit"},
+        {"id": "deepseek-r1", "owned_by": "getit"},
     ]
     return {
         "object": "list",
-        "data": [{"id": m, "object": "model", "created": 1789700000, "owned_by": "qoder"} for m in models_list]
+        "data": [{"id": m["id"], "object": "model", "created": 1789700000, "owned_by": m["owned_by"]} for m in models_list],
     }
-
 
 
 @app.post("/v1/chat/completions")
@@ -525,10 +572,11 @@ async def chat_completions(
 ):
     config = load_config()
     from .config import parse_account_uids
+
     incoming_key = None
     bound_accounts: list[str] = []
-    if authorization and authorization.startswith("Bearer "):
-        incoming_key = authorization[len("Bearer "):].strip()
+    if isinstance(authorization, str) and authorization.startswith("Bearer "):
+        incoming_key = authorization[len("Bearer ") :].strip()
         with get_db() as conn:
             k_row = conn.execute("SELECT account_uid FROM allowed_keys WHERE api_key = ?", (incoming_key,)).fetchone()
             if k_row and k_row["account_uid"]:
@@ -553,7 +601,9 @@ async def chat_completions(
         model = raw_model
 
     import urllib.parse
-    raw_header_target = (x_account_uid or x_account or "").strip() or None
+
+    raw_header_val = (x_account_uid if isinstance(x_account_uid, str) else None) or (x_account if isinstance(x_account, str) else None)
+    raw_header_target = (raw_header_val or "").strip() or None
     header_target = urllib.parse.unquote(raw_header_target) if raw_header_target else None
 
     # Priority: model suffix > header target > key bound accounts (single or list)
@@ -568,9 +618,17 @@ async def chat_completions(
     else:
         target_account = None
 
+    # Determine preferred provider
+    preferred_provider = None
+    if isinstance(target_account, str) and target_account.lower() in ("zcode", "qoder", "custom"):
+        preferred_provider = target_account.lower()
+        target_account = None
+    elif model.startswith(("glm-", "codegeex-", "zcode/")):
+        preferred_provider = "zcode"
+
     stream = bool(payload.get("stream", False))
     messages_count = len(payload.get("messages", []))
-    
+
     accounts_data = db_load_accounts()
     if isinstance(target_account, list):
         add_log(f"Incoming completion request (SUBSET POOL of {len(target_account)} accounts): model={model}, stream={stream}, messages={messages_count}")
@@ -584,32 +642,54 @@ async def chat_completions(
         if eligible_count == 0:
             raise HTTPException(
                 status_code=503,
-                detail="当前没有已开启【全部调用】的公共账号。请在账号池中将至少一个账号设为【全部调用】。"
+                detail="当前没有已开启【全部调用】的公共账号。请在账号池中将至少一个账号设为【全部调用】。",
             )
         max_retries = max(1, eligible_count)
-    
+
     for attempt in range(max_retries):
         try:
-            sess = await get_session(target_account=target_account)
-            add_log(f"Request routing via account: {sess.identity.name} ({sess.identity.uid}) [Attempt {attempt+1}/{max_retries}]")
+            acc_record = get_active_account_record(target_account=target_account, preferred_provider=preferred_provider)
+            provider = acc_record.get("provider") or "qoder"
+            current_uid = acc_record["uid"]
+            add_log(f"Request routing via [{provider.upper()}] account: {acc_record['name']} ({current_uid}) [Attempt {attempt+1}/{max_retries}]")
+
+            if provider in ("zcode", "custom"):
+                token = acc_record["security_oauth_token"]
+                base_url = acc_record.get("base_url") or None
+                if stream:
+                    gen = forward_zcode_stream(payload, api_key=token, base_url=base_url)
+                    add_log(f"Streaming response initiated via {provider.upper()}.")
+                    return StreamingResponse(
+                        gen,
+                        media_type="text/event-stream",
+                        headers={"Cache-Control": "no-cache"},
+                    )
+                else:
+                    add_log(f"Generating completion response via {provider.upper()}...")
+                    resp = await forward_zcode_complete(payload, api_key=token, base_url=base_url)
+                    add_log("Completion request finished successfully.")
+                    return resp
+
+            # Otherwise provider is qoder
+            sess = await get_session(target_account=acc_record["uid"])
             if stream:
                 gen = stream_openai_response(payload, sess)
                 try:
                     first_item = await gen.__anext__()
                 except StopAsyncIteration:
                     first_item = None
-                
+
                 async def stream_success_wrapper(first, g):
                     if first is not None:
                         yield first
                     async for chunk in g:
                         yield chunk
-                
+
                 add_log(f"Streaming response initiated (Attempt {attempt+1}/{max_retries}).")
                 return StreamingResponse(
                     stream_success_wrapper(first_item, gen),
                     media_type="text/event-stream",
-                    headers={"Cache-Control": "no-cache"}
+                    headers={"Cache-Control": "no-cache"},
                 )
             else:
                 add_log(f"Generating full completion response (Attempt {attempt+1}/{max_retries})...")
@@ -617,7 +697,7 @@ async def chat_completions(
                 add_log("Completion request finished successfully.")
                 return resp
         except Exception as exc:
-            current_uid = sess.identity.uid if 'sess' in locals() else "unknown"
+            current_uid = locals().get("current_uid", "unknown")
             if isinstance(target_account, str):
                 add_log(f"Targeted request to '{target_account}' failed: {exc}", "ERROR")
                 raise HTTPException(status_code=502, detail=f"指定账号【{target_account}】调用失败: {exc}")

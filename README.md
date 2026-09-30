@@ -1,8 +1,8 @@
-<h1 align="center">QoderGate (QoderGateway)</h1>
+<h1 align="center">GETIT (Universal Multi-Provider AI Gateway)</h1>
 
 <p align="center">
-  <strong>将多个 Qoder 账号统一聚合、智能路由、每日全自动签到并无缝转换为标准 OpenAI 兼容接口的高性能网关。</strong><br>
-  A high-performance gateway that aggregates multiple Qoder accounts, provides intelligent dispatch, auto daily check-in, and translates upstream services into standard OpenAI-compatible APIs.
+  <strong>将 Qoder、智谱 ZCode、自定义 OpenAI 兼容接口等多厂商大模型服务统一聚合、智能调度路由、日常自动维保并无缝转换为标准 OpenAI 兼容接口的高性能通用网关。</strong><br>
+  A high-performance universal gateway that aggregates multiple providers (Qoder, ZCode / BigModel, Custom Upstreams), providing intelligent routing, automated daily maintenance, and translating upstream services into standard OpenAI-compatible APIs.
 </p>
 
 <p align="center">
@@ -16,15 +16,19 @@
 
 ---
 
-## 💡 为什么选择 QoderGate？ / Highlights
+## 💡 为什么选择 GETIT？ / Highlights
 
-- ⚡ **原生 OpenAI 协议兼容**：提供标准 `/v1/chat/completions` 与 `/v1/models` 端点，无缝即插即用接入 **Codex++、Cursor、NextChat、Cherry Studio、ZCode、Chatbox** 等任意客户端。
-- 🤖 **14 款顶尖模型矩阵**：内置适配并验证了通义千问 `qwen-3.8-max`、月之暗面 `kimi-k3`、DeepSeek `deepseek-v4-pro`、智谱 `glm-5.3` 等全系列模型，支持任务自适应路由 (`auto`) 与极速单行补全 (`lite`)。
-- 🔄 **智能多账号池与负载均衡**：支持批量导入 PAT / Device 凭据，账号按 UID 自动去重。请求失败或额度用尽时自动无缝 Failover 故障转移；支持**全部调用 (默认池)**、**专属单独调用 (仅定向)** 与 **排除调用 (仅签到保活)** 三种模式。
-- 🎁 **每日签到全自动守护体系**：严格锚定每日 **10:00:05 (UTC+8)** 官方权益放量周期，后台守护线程全自动为个人账号领取 +100 Credits 算力加油包（30天有效）；智能识别并彻底剔除企业/组织免签账号，统计精准真实。
-- 🛡️ **双层安全架构**：管理控制台（WebUI Console）管理口令与对外 API Key 权限完全物理隔离，支持自定义生成多组 Key，并可单独绑定指定调用账号。
-- 🎨 **现代化毛玻璃 Web 控制台**：基于 React 18 + Tailwind 构建，内置 Dashboard 系统概览、账号配额透视、API 密钥管理、每日签到中心与实时服务日志，支持中英双语自适应。
-- 🐳 **轻量云原生容器化**：开箱即用 Docker Compose 编排，支持宿主机代码卷绑定与秒级热重载，单实例内存占用仅 ~30MB。
+- 🌐 **通用多厂商聚合架构**：统一抽象驱动层，原生支持 **Qoder** 账号池、**智谱 ZCode** 算力直连、以及任意第三方 **Custom OpenAI-compatible** 厂商，热插拔式扩展未来更多厂商。
+- ⚡ **原生 OpenAI 协议双向桥接**：提供标准 `/v1/chat/completions` 与 `/v1/models` 端点，无缝即插即用接入 **Cursor、Codex++、NextChat、Cherry Studio、ZCode、Chatbox** 等任意客户端。
+- 🎯 **灵活智能路由与定向调用**：
+  - **默认全通池**：多账号负载均衡轮询与自动 Failover 故障转移；
+  - **定向账号调用**：零改动客户端，仅需指定模型为 `model@账号名`（如 `kimi-k3@user1`、`glm-4-flash@zcode1`）即可精确单独调用；
+  - **专属保护模式**：将高价值账号设为专属，常规随机流量不消耗，仅显式指定时响应。
+- 🤖 **全系列顶尖模型矩阵**：内置适配通义千问 `qwen-3.8-max`、月之暗面 `kimi-k3`、DeepSeek `deepseek-v4-pro`、智谱 `glm-4-flash` / `glm-5.3` 等海量模型。
+- 🎁 **周期维保与自动保活体系**：对 Qoder 个人账号严格执行每日 **10:00:05 (UTC+8)** 官方权益自动补领与 Token 刷新；统一维保多厂商账号健康状态。
+- 🛡️ **双层隔离安全架构**：管理控制台（WebUI Console）管理口令与对外 API Key 权限完全物理隔离，支持自定义生成多组 Key 并绑定特定账号权限。
+- 🎨 **现代化毛玻璃 Web 控制台**：基于 React 18 + Tailwind 构建，内置 Dashboard 系统概览、账号池多厂商分类筛选、API 密钥管理与实时服务日志，中英双语即时切换。
+- 🐳 **轻量云原生容器化**：开箱即用 Docker Compose 编排，单实例内存占用仅 ~30MB。
 
 ---
 
@@ -38,50 +42,46 @@ flowchart LR
         C3["自定义脚本 / cURL"]
     end
 
-    subgraph QoderGate["QoderGate 聚合网关 (FastAPI)"]
+    subgraph GETIT["GETIT 通用网关 (FastAPI)"]
         direction TB
         Auth["两层鉴权体系 (API Key / Console)"]
-        Router["智能账号调度器 (Round-Robin / Failover)"]
-        Pool["SQLite 账号池 & 实时配额监控"]
-        Daemon["10:00:05 每日自动签到守护线程"]
-        Bridge["OpenAI <-> Qoder 协议转换引擎 (SSE Stream)"]
+        Router["通用多厂商调度器 (Targeting / Failover)"]
+        Pool["SQLite 账号池 & 厂商驱动抽象"]
+        Daemon["周期自动化维保与保活守护线程"]
+        Bridge["OpenAI 标准流式协议转发引擎 (SSE)"]
     end
 
-    subgraph Upstream["Qoder 官方服务 (qoder.com.cn)"]
-        QAuth["OAuth / Device 换票"]
-        QCamp["Campaigns 权益中心 (+100 Credits)"]
-        QChat["大模型推理引擎 (Kimi / DeepSeek / Qwen / GLM)"]
+    subgraph Upstream["多厂商后端服务 (Multi-Provider Upstreams)"]
+        QoderUp["Qoder 官方服务 (Kimi / DeepSeek / Qwen)"]
+        ZCodeUp["智谱开放平台 (GLM-4 / GLM-4-Flash)"]
+        CustomUp["自定义第三方 OpenAI 兼容上游"]
     end
 
     Clients -->|Bearer API Key| Auth
     Auth --> Router
     Router <--> Pool
-    Daemon -.->|定时自动补领| QCamp
+    Daemon -.->|定时维保保活| Upstream
     Router --> Bridge
-    Bridge -->|Cosy 签名加密| Upstream
+    Bridge -->|协议适配 & 凭据注入| Upstream
 ```
 
 ---
 
 ## 🤖 支持模型矩阵 / Model Matrix
 
-网关内置已验证测试的 14 款主流模型（均支持 1M 或 200K 超长上下文）：
+网关内置支持并已验证的主流模型矩阵：
 
-| 模型 ID (`model`) | 厂商 | 上下文 | 特性说明 |
+| 模型 ID (`model`) | 所属厂商 | 上下文 | 特性说明 |
 | :--- | :--- | :--- | :--- |
-| `kimi-k3` ⭐ | 月之暗面 | 1M | 旗舰级首选，超长上下文与复杂代码深度推理 |
-| `deepseek-v4-pro` ⭐ | DeepSeek | 1M | 顶级代码架构与逻辑分析，生成严谨扎实 |
-| `qwen-3.8-max` ⭐ | 阿里通义 | 1M | 通义全能旗舰，代码与长文本均衡 |
-| `glm-5.3` ⭐ | 智谱 GLM | 1M | 最新主力模型，中文语义理解与 Agent 表现出色 |
-| `kimi-k2.8` | 月之暗面 | 200K | 高性价比轻巧代码助手，响应迅速 |
-| `deepseek-flash` | DeepSeek | 128K | 极速首字响应，低延迟代码补全首选 |
-| `qwen-3.8-flash` | 阿里通义 | 1M | 通义极速版，兼具效率与精度 |
-| `qwen-3.7-max` | 阿里通义 | 1M | 经典全能模型，长文本稳定性极高 |
-| `qwen-3.7-plus` | 阿里通义 | 1M | 均衡兼顾生成速度与上下文深度 |
-| `qwen-3.7-flash` | 阿里通义 | 1M | 轻量通义极速版，日常交互首选 |
-| `glm-5.3-flash` | 智谱 GLM | 1M | 高速推理模型，高并发低延迟 |
-| `glm-5.2` | 智谱 GLM | 128K | 经典主力引擎，运行稳健 |
-| `auto` | Qoder 原生 | 1M | 根据输入任务复杂度自动动态调度最优模型 |
+| `kimi-k3` ⭐ | Qoder / 月之暗面 | 1M | 旗舰级首选，超长上下文与复杂代码深度推理 |
+| `glm-4-flash` ⭐ | ZCode / 智谱 | 128K | 极速首字响应，免费高可用日常主力模型 |
+| `deepseek-v4-pro` ⭐ | Qoder / DeepSeek | 1M | 顶级代码架构与逻辑分析，生成严谨扎实 |
+| `qwen-3.8-max` ⭐ | Qoder / 阿里通义 | 1M | 通义全能旗舰，代码与长文本均衡 |
+| `glm-5.3` ⭐ | Qoder / 智谱 | 1M | 最新主力模型，中文语义理解与 Agent 表现出色 |
+| `glm-4` / `glm-4-plus` | ZCode / 智谱 | 128K | 智谱高阶推理旗舰模型 |
+| `deepseek-flash` | Qoder / DeepSeek | 128K | 低延迟代码补全首选 |
+| `qwen-3.8-flash` | Qoder / 阿里通义 | 1M | 通义极速版，兼具效率与精度 |
+| `auto` | Qoder 原生 | 1M | 任务自适应动态调度模型 |
 | `lite` | Qoder 原生 | 128K | 超轻量极速模型，毫秒级代码单行生成 |
 
 ---

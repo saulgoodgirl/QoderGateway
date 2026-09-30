@@ -260,6 +260,28 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
 
+    provider = row["provider"] if "provider" in row.keys() else "qoder"
+    if provider and provider != "qoder":
+        current_cycle = get_current_checkin_cycle()
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE accounts SET last_checkin_cycle = ?, checkin_streak = COALESCE(checkin_streak, 0) + 1 WHERE uid = ?",
+                (current_cycle, uid),
+            )
+        invalidate_checkin_cache()
+        return {
+            "ok": True,
+            "claimed": True,
+            "already_claimed": False,
+            "waiting_refresh": False,
+            "is_enterprise": False,
+            "credits": 0,
+            "uid": uid,
+            "name": row["name"],
+            "provider": provider,
+            "message": f"【{provider.upper()}】每日通道保活与配额维保已就绪",
+        }
+
     if is_enterprise_account(row):
         return {
             "ok": True,
@@ -506,6 +528,38 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
     def process_single_account(r: Any) -> dict[str, Any]:
         uid = r["uid"]
         name = r["name"]
+        provider = r["provider"] if "provider" in r.keys() else "qoder"
+
+        if provider and provider != "qoder":
+            prev_cycle = r["last_checkin_cycle"] if "last_checkin_cycle" in r.keys() else None
+            is_done = (prev_cycle == current_cycle)
+            streak = r["checkin_streak"] if "checkin_streak" in r.keys() else 1
+            total_days = r["total_claim_days"] if "total_claim_days" in r.keys() else 1
+            return {
+                "uid": uid,
+                "name": name,
+                "plan": f"{provider.upper()} API",
+                "is_enterprise": False,
+                "provider": provider,
+                "claimed_today": is_done,
+                "status_code": "claimed" if is_done else "pending",
+                "status_text": "今日维保已完成" if is_done else "通道正常（待维保打卡）",
+                "streak_days": streak or 1,
+                "total_claim_days": total_days or 1,
+                "reward_credits": 0,
+                "rem_credits": 0.0,
+                "quota_info": {
+                    "remaining": 100000000,
+                    "total": 100000000,
+                    "used": 0,
+                    "plan_remaining": 100000000,
+                    "addon_remaining": 0,
+                    "desc": f"{provider.upper()} 官方上游直通通道",
+                },
+                "quota_desc": f"{provider.upper()} 官方上游直通通道",
+                "error": None,
+            }
+
         plan = "Personal"
 
         user_quota_info = None
