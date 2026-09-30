@@ -523,6 +523,19 @@ export default function App() {
   const [oauthPolling, setOauthPolling] = useState(false)
   const [oauthError, setOauthError] = useState<string | null>(null)
   const oauthPollTimerRef = useRef<any>(null)
+
+  const [zcodeOauthData, setZcodeOauthData] = useState<{
+    flow_id: string
+    poll_token: string
+    authorize_url: string
+    expires_at?: number
+    poll_interval_sec?: number
+  } | null>(null)
+  const [zcodeOauthLoading, setZcodeOauthLoading] = useState(false)
+  const [zcodeOauthPolling, setZcodeOauthPolling] = useState(false)
+  const [zcodeOauthError, setZcodeOauthError] = useState<string | null>(null)
+  const zcodeOauthTimerRef = useRef<any>(null)
+
   const [addAccountPat, setAddAccountPat] = useState('')
   const [addAccountName, setAddAccountName] = useState('')
   const [addingAccount, setAddingAccount] = useState(false)
@@ -877,10 +890,19 @@ export default function App() {
     setOauthPolling(false)
   }, [])
 
+  const stopPollingZcodeOAuth = useCallback(() => {
+    if (zcodeOauthTimerRef.current) {
+      clearTimeout(zcodeOauthTimerRef.current)
+      zcodeOauthTimerRef.current = null
+    }
+    setZcodeOauthPolling(false)
+  }, [])
+
   const closeAddAccountModal = useCallback(() => {
     stopPollingOAuth()
+    stopPollingZcodeOAuth()
     setShowAddAccountModal(false)
-  }, [stopPollingOAuth])
+  }, [stopPollingOAuth, stopPollingZcodeOAuth])
 
   const startQoderOAuthFlow = useCallback(async (region: 'cn' | 'global' = oauthRegion) => {
     stopPollingOAuth()
@@ -951,14 +973,84 @@ export default function App() {
     }
   }, [oauthRegion, stopPollingOAuth, authedFetch, lang, pushToast, closeAddAccountModal, fetchAccounts, fetchStatus, fetchLogs, fetchCheckinStatus])
 
+  const startZcodeOAuthFlow = useCallback(async () => {
+    stopPollingZcodeOAuth()
+    setZcodeOauthLoading(true)
+    setZcodeOauthError(null)
+    setZcodeOauthData(null)
+    try {
+      const resp = await authedFetch('/ui/oauth/zcode/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'bigmodel' }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.detail || 'Failed to initiate ZCode OAuth flow')
+      }
+      const data = await resp.json()
+      setZcodeOauthData(data)
+      setZcodeOauthLoading(false)
+      setZcodeOauthPolling(true)
+
+      let attempts = 0
+      const maxAttempts = 180
+      const pollLoop = async () => {
+        attempts++
+        if (attempts > maxAttempts) {
+          stopPollingZcodeOAuth()
+          setZcodeOauthError(lang === 'zh' ? '授权超时，请点击下方重新生成' : 'Authorization timed out, please regenerate')
+          return
+        }
+        try {
+          const pResp = await authedFetch('/ui/oauth/zcode/poll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              flow_id: data.flow_id,
+              poll_token: data.poll_token,
+              provider: 'bigmodel',
+            }),
+          })
+          if (pResp.ok) {
+            const pData = await pResp.json()
+            if (pData.status === 'ready') {
+              stopPollingZcodeOAuth()
+              pushToast(
+                'SUCCESS',
+                lang === 'zh' ? 'ZCode 授权成功' : 'ZCode Authorized',
+                lang === 'zh' ? `账号“${pData.account?.name || 'ZCode'}”已成功接入并入库！` : `Account "${pData.account?.name || 'ZCode'}" connected!`
+              )
+              closeAddAccountModal()
+              fetchAccounts()
+              fetchStatus()
+              fetchLogs()
+              fetchCheckinStatus()
+              return
+            }
+          }
+        } catch {
+          // ignore transient poll error
+        }
+        zcodeOauthTimerRef.current = setTimeout(pollLoop, (data.poll_interval_sec || 2) * 1000)
+      }
+      zcodeOauthTimerRef.current = setTimeout(pollLoop, (data.poll_interval_sec || 2) * 1000)
+    } catch (err: any) {
+      setZcodeOauthLoading(false)
+      setZcodeOauthError(err.message || 'ZCode OAuth initiation failed')
+    }
+  }, [stopPollingZcodeOAuth, authedFetch, lang, pushToast, closeAddAccountModal, fetchAccounts, fetchStatus, fetchLogs, fetchCheckinStatus])
+
   const openAddAccountModal = useCallback((tab: 'pat' | 'zcode' = 'pat', mode: 'oauth' | 'pat' = 'oauth') => {
     setAddAccountTab(tab)
     setQoderAuthMode(mode)
     setShowAddAccountModal(true)
     if (tab === 'pat' && mode === 'oauth') {
       startQoderOAuthFlow(oauthRegion)
+    } else if (tab === 'zcode' && zcodeAuthMode === 'oauth') {
+      startZcodeOAuthFlow()
     }
-  }, [oauthRegion, startQoderOAuthFlow])
+  }, [oauthRegion, startQoderOAuthFlow, zcodeAuthMode, startZcodeOAuthFlow])
 
   useEffect(() => {
     return () => {
@@ -1022,10 +1114,42 @@ export default function App() {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const text = event.target?.result as string
         const parsed = JSON.parse(text)
+
+        // 1. If it's credentials.json (encrypted or raw tokens) -> send to /ui/accounts/zcode-decrypt
+        if (
+          parsed.zcodejwttoken ||
+          parsed['oauth:bigmodel:access_token'] ||
+          parsed['oauth:active_provider'] ||
+          Object.keys(parsed).some(k => k.startsWith('enc:') || String(parsed[k]).startsWith('enc:v1:'))
+        ) {
+          const dResp = await authedFetch('/ui/accounts/zcode-decrypt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credentials: parsed }),
+          })
+          if (!dResp.ok) {
+            const err = await dResp.json().catch(() => ({}))
+            throw new Error(err.detail || 'ZCode credentials decryption failed')
+          }
+          const dData = await dResp.json()
+          pushToast(
+            'SUCCESS',
+            lang === 'zh' ? 'ZCode 凭据解密成功' : 'ZCode Decrypted',
+            lang === 'zh' ? `账号“${dData.account?.name || 'ZCode'}”已成功解密并入库！` : `Account "${dData.account?.name || 'ZCode'}" decrypted and added!`
+          )
+          closeAddAccountModal()
+          fetchAccounts()
+          fetchStatus()
+          fetchLogs()
+          fetchCheckinStatus()
+          return
+        }
+
+        // 2. If it's config.json -> extract apiKey
         let foundKey = ''
         if (parsed.provider) {
           for (const k of ['builtin:bigmodel', 'builtin:bigmodel-coding-plan', 'builtin:bigmodel-start-plan']) {
@@ -1042,12 +1166,13 @@ export default function App() {
         if (foundKey) {
           setZcodeApiKey(foundKey)
           setZcodeAccountName(lang === 'zh' ? 'ZCode 智谱官方' : 'ZCode BigModel')
+          setZcodeAuthMode('pat')
           pushToast('SUCCESS', lang === 'zh' ? '已解析本地配置文件' : 'Parsed Config File', `提取到 API Key: ${foundKey.slice(0, 10)}...`)
         } else {
-          pushToast('ERROR', lang === 'zh' ? '未找到 API Key' : 'No API Key Found', lang === 'zh' ? '请选择 ~/.zcode/v2/config.json 配置文件' : 'Please select valid ~/.zcode/v2/config.json')
+          pushToast('ERROR', lang === 'zh' ? '未找到有效凭据' : 'No Valid Key Found', lang === 'zh' ? '请选择 ~/.zcode/v2/credentials.json 或 config.json' : 'Please select valid credentials.json or config.json')
         }
       } catch (err: any) {
-        pushToast('ERROR', lang === 'zh' ? '文件解析失败' : 'Failed to parse file', err.message)
+        pushToast('ERROR', lang === 'zh' ? '文件处理失败' : 'Failed to process file', err.message)
       }
     }
     reader.readAsText(file)
@@ -3718,9 +3843,9 @@ export default function App() {
                           <span className="material-symbols-outlined text-[22px]">folder_open</span>
                         </div>
                         <div>
-                          <div className="font-bold text-sm text-ink">{lang === 'zh' ? '选择本地 ZCode 配置文件自动读取' : 'Select Local ZCode Config'}</div>
+                          <div className="font-bold text-sm text-ink">{lang === 'zh' ? '选择本地 ZCode 凭据或配置文件自动读取' : 'Select Local ZCode Credentials'}</div>
                           <p className="text-xs text-body mt-0.5">
-                            {lang === 'zh' ? '系统将解析 ~/.zcode/v2/config.json 自动提取 BigModel 凭据' : 'Parses ~/.zcode/v2/config.json to extract BigModel API Key'}
+                            {lang === 'zh' ? '支持选择 credentials.json（自动解密真实 token）或 config.json' : 'Supports credentials.json (auto-decrypted) or config.json'}
                           </p>
                         </div>
                       </div>
@@ -3739,10 +3864,10 @@ export default function App() {
                           className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-all"
                         >
                           <span className="material-symbols-outlined text-[18px]">upload_file</span>
-                          <span>{lang === 'zh' ? '点击选择 config.json 文件' : 'Choose config.json'}</span>
+                          <span>{lang === 'zh' ? '点击选择 credentials.json 或 config.json' : 'Choose credentials.json / config.json'}</span>
                         </button>
                         <span className="text-[11px] text-emerald-800">
-                          {lang === 'zh' ? '路径通常为 C:\\Users\\你的用户名\\.zcode\\v2\\config.json' : 'Path is usually ~/.zcode/v2/config.json'}
+                          {lang === 'zh' ? '通常位于 C:\\Users\\你的用户名\\.zcode\\v2\\credentials.json' : 'Usually at ~/.zcode/v2/credentials.json'}
                         </span>
                       </div>
 
@@ -3773,64 +3898,112 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Sub-mode 3: OAuth Evaluation & Guidance */}
+                {/* Sub-mode 3: Active ZCode CLI OAuth Flow */}
                 {zcodeAuthMode === 'oauth' && (
                   <div className="space-y-4">
-                    <div className="p-5 rounded-2xl bg-amber-50/80 border border-amber-200/80 space-y-3 text-xs leading-relaxed text-amber-950">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-bold text-sm text-amber-950">
-                          <span className="material-symbols-outlined text-amber-600 text-[20px]">info</span>
-                          <span>{lang === 'zh' ? '智谱 BigModel OAuth 机制评估' : 'ZCode OAuth Evaluation'}</span>
-                        </div>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/70 text-amber-900 font-mono">
-                          Client Private Secret
-                        </span>
+                    <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/70 text-xs text-emerald-900 leading-relaxed space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-emerald-950">
+                        <span className="material-symbols-outlined text-[17px] text-emerald-600">bolt</span>
+                        <span>{lang === 'zh' ? 'ZCode 官方 CLI 免密网页授权（与 CreditDaddy 一致）' : 'ZCode Official CLI OAuth Flow'}</span>
                       </div>
                       <p>
                         {lang === 'zh'
-                          ? '智谱开放平台的网页 OAuth 授权采用了客户端内置私有密钥（BIGMODEL_OAUTH_APP_SECRET），未提供面向第三方网关的 RFC 8628 设备代码授权公开流（与 Qoder 开源流不同）。'
-                          : 'ZhiPu BigModel OAuth relies on private embedded client credentials and does not expose a public RFC 8628 device flow.'}
-                      </p>
-                      <p className="font-semibold text-amber-900">
-                        {lang === 'zh'
-                          ? '推荐方案：若您已在桌面端运行过 ZCode 并完成登录，客户端已自动将凭据保存到本地。只需点击【本地导入】选择 config.json 即可一秒同步！或直接使用【API Key】快速录入。'
-                          : 'Recommended: If you logged into ZCode desktop, your key is already saved in config.json. Use Local Import or API Key directly.'}
+                          ? '点击下方按钮发起官方授权流，在任意浏览器中扫码或登录智谱账号，网关将自动轮询并提取真实的 zcodejwttoken 与 access_token 入库，尊享完整特权！'
+                          : 'Initiates official CLI OAuth. Log in on bigmodel.cn, gateway automatically captures real zcodejwttoken & access_token.'}
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setZcodeAuthMode('local')}
-                        className="p-3.5 rounded-xl border border-hairline bg-surface-card hover:bg-slate-50 transition-all text-left flex items-start gap-3 cursor-pointer group"
-                      >
-                        <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0 mt-0.5">folder_open</span>
-                        <div>
-                          <div className="font-bold text-xs text-ink group-hover:text-emerald-700 transition-colors">
-                            {lang === 'zh' ? '前往【本地导入】' : 'Go to Local Import'}
-                          </div>
-                          <div className="text-[11px] text-body mt-0.5">
-                            {lang === 'zh' ? '选择本地 config.json 免复制' : 'Select local config.json'}
-                          </div>
-                        </div>
-                      </button>
+                    {zcodeOauthError && (
+                      <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 flex items-center justify-between">
+                        <span>{zcodeOauthError}</span>
+                        <button
+                          type="button"
+                          onClick={startZcodeOAuthFlow}
+                          className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 cursor-pointer"
+                        >
+                          {lang === 'zh' ? '重试' : 'Retry'}
+                        </button>
+                      </div>
+                    )}
 
-                      <button
-                        type="button"
-                        onClick={() => setZcodeAuthMode('pat')}
-                        className="p-3.5 rounded-xl border border-hairline bg-surface-card hover:bg-slate-50 transition-all text-left flex items-start gap-3 cursor-pointer group"
-                      >
-                        <span className="material-symbols-outlined text-indigo-600 text-[22px] shrink-0 mt-0.5">key</span>
+                    {zcodeOauthLoading && (
+                      <div className="p-8 rounded-xl border border-hairline bg-surface-ground flex flex-col items-center justify-center gap-3 text-center">
+                        <span className="material-symbols-outlined text-[32px] text-emerald-600 animate-spin">progress_activity</span>
+                        <div className="text-xs font-semibold text-body">
+                          {lang === 'zh' ? '正在连接 zcode.z.ai 获取 CLI 登录令牌...' : 'Requesting CLI OAuth ticket...'}
+                        </div>
+                      </div>
+                    )}
+
+                    {!zcodeOauthLoading && !zcodeOauthData && (
+                      <div className="p-6 rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/40 flex flex-col items-center justify-center gap-3 text-center">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+                          <span className="material-symbols-outlined text-[24px]">vpn_key</span>
+                        </div>
                         <div>
-                          <div className="font-bold text-xs text-ink group-hover:text-indigo-700 transition-colors">
-                            {lang === 'zh' ? '前往【API Key 录入】' : 'Go to API Key'}
+                          <div className="font-bold text-sm text-ink">{lang === 'zh' ? '一键拉起智谱官方免密授权' : 'Initiate ZCode OAuth'}</div>
+                          <div className="text-xs text-body mt-0.5">{lang === 'zh' ? '点击后将生成专属授权链接，在网页登录后自动同步' : 'Generates personal login link, auto-syncs after authorization'}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={startZcodeOAuthFlow}
+                          className="mt-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-700/20 flex items-center gap-2 cursor-pointer transition-all"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">launch</span>
+                          <span>{lang === 'zh' ? '立即发起授权' : 'Start Authorization'}</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {!zcodeOauthLoading && zcodeOauthData && (
+                      <div className="space-y-4">
+                        <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/50 space-y-3">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[16px] text-emerald-600">link</span>
+                              {lang === 'zh' ? '授权链接已就绪' : 'Authorization Link Ready'}
+                            </span>
+                            <span className="font-mono text-[10px] text-emerald-700">Flow: {zcodeOauthData.flow_id.slice(0, 10)}...</span>
                           </div>
-                          <div className="text-[11px] text-body mt-0.5">
-                            {lang === 'zh' ? '直接粘贴官网 API Key' : 'Paste BigModel API Key'}
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => window.open(zcodeOauthData.authorize_url, '_blank')}
+                              className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                              <span>{lang === 'zh' ? '打开智谱授权网页登录' : 'Open in Browser'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(zcodeOauthData.authorize_url)
+                                pushToast('SUCCESS', lang === 'zh' ? '已复制授权链接' : 'Link Copied', lang === 'zh' ? '请在浏览器中打开并完成登录' : 'Open in browser to complete login')
+                              }}
+                              className="px-4 py-2.5 border border-hairline bg-white hover:bg-slate-50 text-ink font-bold text-xs rounded-xl flex items-center gap-1 cursor-pointer transition-all"
+                            >
+                              <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                              <span>{lang === 'zh' ? '复制链接' : 'Copy'}</span>
+                            </button>
                           </div>
                         </div>
-                      </button>
-                    </div>
+
+                        <div className="flex flex-col items-center justify-center gap-1.5 pt-1">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-body">
+                            <span className="material-symbols-outlined text-[18px] animate-spin text-emerald-600">progress_activity</span>
+                            <span>{lang === 'zh' ? '等待网页授权完成中...' : 'Waiting for authorization...'}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={startZcodeOAuthFlow}
+                            className="text-[11px] text-body hover:text-ink underline transition-colors cursor-pointer"
+                          >
+                            {lang === 'zh' ? '重新生成授权链接' : 'Regenerate link'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="pt-2 flex justify-end">
                       <button

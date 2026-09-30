@@ -46,6 +46,9 @@ from .zcode import (
     forward_zcode_complete,
     ping_zcode_account,
     load_local_zcode_credentials,
+    init_zcode_cli_oauth,
+    poll_zcode_cli_oauth,
+    parse_zcode_credentials_dict,
 )
 from .oauth_device import (
     initiate_qoder_device_flow,
@@ -432,6 +435,110 @@ async def zcode_import(verify: None = Depends(check_gateway_token)) -> dict[str,
     except Exception as exc:
         add_log(f"Failed to import local ZCode account: {exc}", "ERROR")
         raise HTTPException(status_code=400, detail=f"导入本机 ZCode 凭据失败: {exc}")
+
+
+@app.post("/ui/oauth/zcode/init")
+async def oauth_zcode_init(payload: dict[str, Any] = Body(default={}), verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """发起 ZCode CLI 免密网页授权（与 CreditDaddy/官方 CLI 一致，无需本地客户端）。"""
+    provider = str(payload.get("provider") or "bigmodel").strip().lower()
+    try:
+        data = await init_zcode_cli_oauth(provider=provider)
+        add_log(f"Initiated ZCode CLI OAuth flow (Provider: {provider}, Flow: {data['flow_id']})")
+        return data
+    except Exception as exc:
+        add_log(f"Failed to initiate ZCode CLI OAuth: {exc}", "ERROR")
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/ui/oauth/zcode/poll")
+async def oauth_zcode_poll(payload: dict[str, Any], verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """轮询 ZCode CLI 授权结果，授权成功后自动录入账号。"""
+    flow_id = str(payload.get("flow_id") or "").strip()
+    poll_token = str(payload.get("poll_token") or "").strip()
+    provider = str(payload.get("provider") or "bigmodel").strip().lower()
+
+    if not flow_id or not poll_token:
+        raise HTTPException(status_code=400, detail="Missing flow_id or poll_token")
+
+    try:
+        res = await poll_zcode_cli_oauth(flow_id=flow_id, poll_token=poll_token, provider=provider)
+        if res.get("status") == "ready":
+            uid = res["uid"]
+            name = res["name"]
+            token = res["token"]
+            jwt = res.get("jwt") or ""
+            with get_db() as conn:
+                existing = conn.execute("SELECT enabled FROM accounts WHERE uid = ?", (uid,)).fetchone()
+                enabled = existing[0] if existing else 1
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO accounts (
+                        uid, name, user_type, security_oauth_token, refresh_token, machine_id,
+                        enabled, last_status, last_error, quota, is_quota_exceeded, plan,
+                        user_tag, region, provider, base_url
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 100000000, 0, 'ZCode Free/Pro', 'BigModel', 'cn', 'zcode', '')
+                    """,
+                    (uid, name, "zcode_user", token, jwt, str(uuid.uuid4()), enabled),
+                )
+                if not db_get_settings("active_uid"):
+                    db_set_settings("active_uid", uid)
+            add_log(f"ZCode CLI OAuth authorization succeeded! Account: {name} ({uid})")
+            return {
+                "status": "ready",
+                "account": {
+                    "uid": uid,
+                    "name": name,
+                    "provider": "zcode",
+                    "enabled": bool(enabled),
+                },
+            }
+        return res
+    except Exception as exc:
+        add_log(f"ZCode CLI OAuth poll error: {exc}", "ERROR")
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/ui/accounts/zcode-decrypt")
+async def zcode_decrypt(payload: dict[str, Any], verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """解析并解密用户上传或粘贴的 ZCode credentials.json，自动入库。"""
+    creds_raw = payload.get("credentials")
+    if isinstance(creds_raw, str):
+        try:
+            creds_data = json.loads(creds_raw)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid JSON string: {exc}")
+    elif isinstance(creds_raw, dict):
+        creds_data = creds_raw
+    else:
+        raise HTTPException(status_code=400, detail="Missing credentials data")
+
+    secret = payload.get("secret")
+    try:
+        parsed = parse_zcode_credentials_dict(creds_data, secret=secret)
+        uid = parsed["uid"]
+        name = parsed["name"]
+        token = parsed["token"]
+        jwt = parsed.get("jwt") or ""
+        with get_db() as conn:
+            existing = conn.execute("SELECT enabled FROM accounts WHERE uid = ?", (uid,)).fetchone()
+            enabled = existing[0] if existing else 1
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO accounts (
+                    uid, name, user_type, security_oauth_token, refresh_token, machine_id,
+                    enabled, last_status, last_error, quota, is_quota_exceeded, plan,
+                    user_tag, region, provider, base_url
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 100000000, 0, 'ZCode Free/Pro', 'BigModel', 'cn', 'zcode', '')
+                """,
+                (uid, name, "zcode_user", token, jwt, str(uuid.uuid4()), enabled),
+            )
+            if not db_get_settings("active_uid"):
+                db_set_settings("active_uid", uid)
+        add_log(f"Decrypted and registered ZCode account: {name} ({uid})")
+        return {"status": "ok", "account": {"uid": uid, "name": name, "provider": "zcode"}}
+    except Exception as exc:
+        add_log(f"Failed to decrypt ZCode credentials: {exc}", "ERROR")
+        raise HTTPException(status_code=400, detail=f"解密 ZCode 凭据失败: {exc}")
 
 
 @app.post("/ui/oauth/qoder/device-code")

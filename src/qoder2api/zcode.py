@@ -49,6 +49,135 @@ def decrypt_zcode_value(encrypted_val: str, key: bytes | None = None) -> str:
     return pt.decode("utf-8")
 
 
+def parse_zcode_credentials_dict(creds_data: dict[str, Any], secret: str | None = None) -> dict[str, Any]:
+    """Decrypts credentials dictionary from ZCode credentials.json."""
+    if secret:
+        key = hashlib.sha256(secret.encode("utf-8")).digest()
+    else:
+        key = get_fallback_key()
+
+    decrypted: dict[str, Any] = {}
+    for k, v in creds_data.items():
+        if isinstance(v, str) and v.startswith("enc:v1:"):
+            try:
+                decrypted[k] = decrypt_zcode_value(v, key)
+            except Exception:
+                decrypted[k] = v
+        else:
+            decrypted[k] = v
+
+    token = decrypted.get("oauth:bigmodel:access_token", "")
+    jwt = decrypted.get("zcodejwttoken", "")
+    user_info_str = decrypted.get("oauth:bigmodel:user_info", "{}")
+    user_info = {}
+    try:
+        user_info = json.loads(user_info_str) if isinstance(user_info_str, str) else user_info_str
+    except Exception:
+        pass
+
+    uid = str(user_info.get("id") or user_info.get("uid") or "").strip()
+    name = str(user_info.get("name") or user_info.get("username") or user_info.get("nickname") or "ZCode User").strip()
+
+    primary_token = jwt or token
+    if not uid and primary_token:
+        uid = "zcode_" + hashlib.md5(primary_token.encode("utf-8")).hexdigest()[:16]
+
+    return {
+        "provider": "zcode",
+        "uid": uid,
+        "name": name,
+        "token": primary_token,
+        "jwt": jwt,
+        "access_token": token,
+        "user_info": user_info,
+        "region": "cn",
+    }
+
+
+ZCODE_API_BASE = "https://zcode.z.ai"
+
+
+async def init_zcode_cli_oauth(provider: str = "bigmodel") -> dict[str, Any]:
+    """Initiates ZCode CLI OAuth flow (same protocol used by CreditDaddy and official ZCode CLI)."""
+    import secrets
+    poll_token = secrets.token_hex(32)
+    headers = {
+        "Authorization": f"Bearer {poll_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "ZCode/3.14.3",
+    }
+    url = f"{ZCODE_API_BASE}/api/v1/oauth/cli/init"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(url, headers=headers, json={"provider": provider})
+        if resp.status_code >= 400:
+            raise RuntimeError(f"ZCode CLI OAuth init failed ({resp.status_code}): {resp.text}")
+        body = resp.json()
+        if body.get("code") != 0 or not body.get("data"):
+            raise RuntimeError(f"ZCode CLI OAuth error: {body.get('msg', 'Unknown error')}")
+        data = body["data"]
+        return {
+            "flow_id": data["flow_id"],
+            "poll_token": poll_token,
+            "authorize_url": data["authorize_url"],
+            "expires_at": data.get("expires_at"),
+            "poll_interval_sec": data.get("poll_interval_sec", 2),
+            "provider": provider,
+        }
+
+
+async def poll_zcode_cli_oauth(flow_id: str, poll_token: str, provider: str = "bigmodel") -> dict[str, Any]:
+    """Polls ZCode CLI OAuth flow. Returns status='pending' or status='ready' with tokens and user info."""
+    headers = {
+        "Authorization": f"Bearer {poll_token}",
+        "Accept": "application/json",
+        "User-Agent": "ZCode/3.14.3",
+    }
+    url = f"{ZCODE_API_BASE}/api/v1/oauth/cli/poll/{flow_id}"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(url, headers=headers)
+        if resp.status_code in (500, 502, 503, 504, 408, 429):
+            return {"status": "pending"}
+        if resp.status_code >= 400:
+            raise RuntimeError(f"ZCode OAuth poll failed ({resp.status_code}): {resp.text}")
+        body = resp.json()
+        if body.get("code") != 0:
+            raise RuntimeError(f"ZCode OAuth poll error: {body.get('msg', 'Unknown error')}")
+        d = body.get("data") or {}
+        st = d.get("status")
+        if st == "pending":
+            return {"status": "pending"}
+        if st == "failed":
+            raise RuntimeError("ZCode authorization failed or was rejected by user")
+        if st != "ready":
+            return {"status": st or "pending"}
+
+        jwt = str(d.get("token") or "").strip()
+        user = d.get("user") or {}
+        user_id = str(user.get("user_id") or user.get("id") or "").strip()
+        bm = d.get("bigmodel") or {}
+        access_token = str(bm.get("access_token") or bm.get("accessToken") or "").strip()
+        refresh_token = str(bm.get("refresh_token") or bm.get("refreshToken") or "").strip()
+        zai = d.get("zai") or {}
+        if provider == "zai" and not access_token:
+            access_token = str(zai.get("access_token") or "").strip()
+
+        primary_token = jwt or access_token
+        name = user.get("name") or user.get("username") or user.get("email") or f"ZCode-{user_id}"
+
+        return {
+            "status": "ready",
+            "provider": "zcode",
+            "uid": user_id or f"zcode_{uuid.uuid4().hex[:12]}",
+            "name": str(name),
+            "token": primary_token,
+            "jwt": jwt,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user": user,
+        }
+
+
 def load_local_zcode_credentials() -> dict[str, Any]:
     """Reads and decrypts local ZCode credentials from ~/.zcode/v2/credentials.json.
 
