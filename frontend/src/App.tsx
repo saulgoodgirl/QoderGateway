@@ -895,6 +895,41 @@ export default function App() {
     }
   }
 
+  const handleZCodeConfigFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string
+        const parsed = JSON.parse(text)
+        let foundKey = ''
+        if (parsed.provider) {
+          for (const k of ['builtin:bigmodel', 'builtin:bigmodel-coding-plan', 'builtin:bigmodel-start-plan']) {
+            const key = parsed.provider[k]?.options?.apiKey
+            if (key && typeof key === 'string' && key.includes('.')) {
+              foundKey = key.trim()
+              break
+            }
+          }
+        }
+        if (!foundKey && parsed.apiKey && typeof parsed.apiKey === 'string') {
+          foundKey = parsed.apiKey.trim()
+        }
+        if (foundKey) {
+          setZcodeApiKey(foundKey)
+          setZcodeAccountName(lang === 'zh' ? 'ZCode 智谱官方' : 'ZCode BigModel')
+          pushToast('SUCCESS', lang === 'zh' ? '已解析本地配置文件' : 'Parsed Config File', `提取到 API Key: ${foundKey.slice(0, 10)}...`)
+        } else {
+          pushToast('ERROR', lang === 'zh' ? '未找到 API Key' : 'No API Key Found', lang === 'zh' ? '请选择 ~/.zcode/v2/config.json 配置文件' : 'Please select valid ~/.zcode/v2/config.json')
+        }
+      } catch (err: any) {
+        pushToast('ERROR', lang === 'zh' ? '文件解析失败' : 'Failed to parse file', err.message)
+      }
+    }
+    reader.readAsText(file)
+  }
+
   const handleAddZCodeManual = async () => {
     const trimmed = zcodeApiKey.trim()
     if (!trimmed) return
@@ -2902,25 +2937,50 @@ export default function App() {
             {/* Tab 2: ZCode */}
             {addAccountTab === 'zcode' && (
               <div className="p-6 space-y-4">
-                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/70 flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="font-bold text-sm text-emerald-950 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-emerald-600 text-[18px]">bolt</span>
-                      {lang === 'zh' ? '一键读取本机 ZCode 授权凭据' : 'Import Local ZCode Credentials'}
+                {/* Smart Client File Import or Server Local Import */}
+                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/70 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <div className="font-bold text-sm text-emerald-950 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-emerald-600 text-[18px]">folder_open</span>
+                        {lang === 'zh' ? '选择本地 ZCode 配置文件一键读取' : 'Select Local ZCode Config File'}
+                      </div>
+                      <p className="text-xs text-emerald-800">
+                        {lang === 'zh' ? '点击选择个人电脑 ~/.zcode/v2/config.json 自动提取 API Key' : 'Select ~/.zcode/v2/config.json to auto-extract API Key'}
+                      </p>
                     </div>
-                    <p className="text-xs text-emerald-800">
-                      {lang === 'zh' ? '自动解密本机 ~/.zcode/v2/credentials.json 与 config.json 凭证' : 'Auto decrypts ~/.zcode/v2 credentials and config'}
-                    </p>
+                    <div>
+                      <input
+                        type="file"
+                        id="zcode-config-upload"
+                        accept=".json"
+                        className="hidden"
+                        onChange={handleZCodeConfigFileSelect}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => document.getElementById('zcode-config-upload')?.click()}
+                        className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">file_upload</span>
+                        {lang === 'zh' ? '选择文件导入' : 'Choose File'}
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleImportZCodeLocal}
-                    disabled={importingZCodeLocal}
-                    className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shrink-0 flex items-center gap-1.5"
-                  >
-                    {importingZCodeLocal && <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>}
-                    {importingZCodeLocal ? (lang === 'zh' ? '导入中...' : 'Importing...') : (lang === 'zh' ? '本机导入' : 'Import Local')}
-                  </button>
+
+                  {typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+                    <div className="pt-2 border-t border-emerald-200/50 flex items-center justify-between">
+                      <span className="text-[11px] text-emerald-800">{lang === 'zh' ? '本机开发环境运行：可直接读取当前系统的 ~/.zcode' : 'Localhost detected: can read direct filesystem'}</span>
+                      <button
+                        type="button"
+                        onClick={handleImportZCodeLocal}
+                        disabled={importingZCodeLocal}
+                        className="text-xs font-bold text-emerald-800 underline hover:text-emerald-950 cursor-pointer"
+                      >
+                        {importingZCodeLocal ? (lang === 'zh' ? '读取中...' : 'Reading...') : (lang === 'zh' ? '直接读取本机路径' : 'Direct Read')}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="relative flex py-1 items-center">
@@ -2930,11 +2990,14 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                    {lang === 'zh' ? 'ZCode / BigModel API Key *' : 'ZCode / BigModel API Key *'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-semibold text-body block uppercase tracking-wider">
+                      {lang === 'zh' ? 'ZCode / BigModel API Key *' : 'ZCode / BigModel API Key *'}
+                    </label>
+                    <span className="text-[11px] text-slate-400 font-mono">格式如: xxxxxxxx.xxxxxxxx</span>
+                  </div>
                   <input
-                    type="password"
+                    type="text"
                     value={zcodeApiKey}
                     onChange={e => setZcodeApiKey(e.target.value)}
                     placeholder="xxxxxxxx.xxxxxxxx"
