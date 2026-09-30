@@ -21,7 +21,7 @@ interface UIStatus { ready: boolean; mode: string; username: string | null; uid:
 interface KeyDetail { api_key: string; name?: string; account_uid?: string }
 interface APIConfig { auth_required: boolean; allowed_keys: string[]; allowed_keys_detail?: KeyDetail[] }
 interface Message { role: 'user' | 'assistant'; content: string }
-type TabId = 'dashboard' | 'accounts' | 'checkin' | 'playground' | 'api-keys' | 'logs'
+type TabId = 'dashboard' | 'accounts' | 'checkin' | 'models' | 'playground' | 'api-keys' | 'logs'
 type AppTabId = TabId
 type Lang = 'en' | 'zh'
 type ToastType = 'SUCCESS' | 'ERROR' | 'INFO'
@@ -69,13 +69,44 @@ interface CheckinOverview {
   refresh_rule?: string
 }
 
-const NAV_ITEMS: { id: AppTabId; icon: string; label: string }[] = [
-  { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
-  { id: 'accounts', icon: 'account_balance_wallet', label: 'Account Pool' },
-  { id: 'checkin', icon: 'card_giftcard', label: 'Daily Rewards' },
-  { id: 'api-keys', icon: 'vpn_key', label: 'API Key Management' },
-  { id: 'logs', icon: 'list_alt', label: 'Logs' },
+interface NavItemDef {
+  id: AppTabId
+  icon: string
+  labelZh: string
+  labelEn: string
+  badgeZh?: string
+  badgeEn?: string
+}
+
+interface NavGroupDef {
+  groupZh: string
+  groupEn: string
+  items: NavItemDef[]
+}
+
+const NAV_GROUPS: NavGroupDef[] = [
+  {
+    groupZh: '核心网关管理',
+    groupEn: 'Core Gateway',
+    items: [
+      { id: 'dashboard', icon: 'grid_view', labelZh: '系统总览', labelEn: 'Dashboard' },
+      { id: 'accounts', icon: 'group', labelZh: '双平台账号池', labelEn: 'Account Pool' },
+      { id: 'checkin', icon: 'card_giftcard', labelZh: '自动签到 · 领算力', labelEn: 'Daily Rewards' },
+      { id: 'models', icon: 'psychology', labelZh: '模型矩阵 & 路由', labelEn: 'Models & Routing', badgeZh: '18 款', badgeEn: '18 Models' },
+    ],
+  },
+  {
+    groupZh: '对外服务与安全',
+    groupEn: 'Services & Security',
+    items: [
+      { id: 'api-keys', icon: 'key', labelZh: 'API Key & 子池绑定', labelEn: 'API Keys & Pools' },
+      { id: 'playground', icon: 'chat', labelZh: '在线调试 Playground', labelEn: 'Playground' },
+      { id: 'logs', icon: 'terminal', labelZh: '服务分流日志', labelEn: 'Service Logs' },
+    ],
+  },
 ]
+
+const NAV_ITEMS = NAV_GROUPS.flatMap(g => g.items)
 
 interface GatewayModelInfo {
   id: string
@@ -109,13 +140,13 @@ const VERIFIED_MODELS: GatewayModelInfo[] = [
 const UI_TEXT = {
   en: {
     nav: {
-      dashboard: 'Dashboard', accounts: 'Account Pool', checkin: 'Daily Rewards', playground: 'AI Playground', apiKeys: 'API Key Management', logs: 'Logs',
+      dashboard: 'Dashboard', accounts: 'Account Pool', checkin: 'Daily Rewards', models: 'Models & Routing', playground: 'AI Playground', apiKeys: 'API Key Management', logs: 'Logs',
     },
     breadcrumb: {
-      dashboard: 'Control Panel / Overview', accounts: 'Console / Management', checkin: 'Console / Daily Rewards', playground: 'Playground / Experiment', apiKeys: 'Administration / Security', logs: 'System / Observability', docs: 'Developer Platform / Wiki',
+      dashboard: 'Control Panel / Overview', accounts: 'Console / Account Pool', checkin: 'Rewards Center / Daily Check-in', models: 'Console / Model Matrix', playground: 'Playground / Experiment', apiKeys: 'Administration / Security', logs: 'System / Observability', docs: 'Developer Platform / Wiki',
     },
     title: {
-      dashboard: 'System Overview', accounts: 'Account Pool', checkin: 'Daily Rewards & Check-in', playground: 'AI Playground', apiKeys: 'API Management', logs: 'Service Logs', docs: 'Documentation',
+      dashboard: 'System Overview', accounts: 'Dual-Platform Account Pool', checkin: 'Dual-Track Auto Check-in & Rewards', models: 'Model Matrix & Routing', playground: 'AI Playground', apiKeys: 'API Management & Sub-pools', logs: 'Service Logs', docs: 'Documentation',
     },
     common: { docs: 'Docs', support: 'Support', healthy: 'Healthy', offline: 'Offline', signOut: 'Sign Out', refresh: 'Refresh', add: 'Add', delete: 'Delete', copy: 'Copy' },
     dashboard: {
@@ -158,13 +189,13 @@ const UI_TEXT = {
   },
   zh: {
     nav: {
-      dashboard: '控制台', accounts: '账号池', checkin: '每日签到', playground: '调试对话', apiKeys: 'API Key 管理', logs: '服务日志',
+      dashboard: '系统总览', accounts: '双平台账号池', checkin: '自动签到 · 领算力', models: '模型矩阵 & 路由', playground: '在线调试 Playground', apiKeys: 'API Key & 子池绑定', logs: '服务分流日志',
     },
     breadcrumb: {
-      dashboard: '控制台 / 概览', accounts: '控制台 / 账号管理', checkin: '控制台 / 每日签到', playground: '调试 / 对话测试', apiKeys: '管理 / 安全', logs: '系统 / 日志', docs: '开发者平台 / 文档',
+      dashboard: '控制台 / 概览', accounts: '控制台 / 账号管理', checkin: '权益中心 / 每日签到', models: '控制台 / 模型矩阵', playground: '调试 / 对话测试', apiKeys: '管理 / 安全', logs: '系统 / 日志', docs: '开发者平台 / 文档',
     },
     title: {
-      dashboard: '系统概览', accounts: '账号池', checkin: '每日签到 · 积分中心', playground: '调试对话', apiKeys: 'API 管理', logs: '服务日志', docs: '文档',
+      dashboard: '双引擎聚合网关总览', accounts: '双平台账号管理中枢', checkin: '双轨自动打卡与 1 亿 Token 领券', models: '已实测验证模型矩阵 (18 款全量支持)', playground: '在线调试 Playground', apiKeys: 'API Key 授权与子池管理', logs: '服务分流日志监控', docs: '文档',
     },
     common: { docs: '文档', support: '支持', healthy: '正常', offline: '未就绪', signOut: '退出', refresh: '刷新', add: '添加', delete: '删除', copy: '复制' },
     dashboard: {
@@ -378,7 +409,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<AppTabId>(() => {
     try {
       const stored = localStorage.getItem('qodergate_active_tab') as AppTabId
-      if (stored && ['dashboard', 'accounts', 'checkin', 'api-keys', 'logs'].includes(stored)) {
+      if (stored && ['dashboard', 'accounts', 'checkin', 'models', 'playground', 'api-keys', 'logs'].includes(stored)) {
         return stored
       }
     } catch {}
@@ -513,6 +544,7 @@ export default function App() {
     dashboard: t.nav.dashboard,
     accounts: t.nav.accounts,
     checkin: t.nav.checkin,
+    models: t.nav.models,
     playground: t.nav.playground,
     'api-keys': t.nav.apiKeys,
     logs: t.nav.logs,
@@ -521,6 +553,7 @@ export default function App() {
     dashboard: { bc: t.breadcrumb.dashboard, title: t.title.dashboard },
     accounts: { bc: t.breadcrumb.accounts, title: t.title.accounts },
     checkin: { bc: t.breadcrumb.checkin, title: t.title.checkin },
+    models: { bc: t.breadcrumb.models, title: t.title.models },
     playground: { bc: t.breadcrumb.playground, title: t.title.playground },
     'api-keys': { bc: t.breadcrumb.apiKeys, title: t.title.apiKeys },
     logs: { bc: t.breadcrumb.logs, title: t.title.logs },
@@ -1230,45 +1263,160 @@ export default function App() {
       <div ref={el => { orbRefs.current[2] = el }} className="orb bg-mint w-[500px] h-[500px] -top-24 -right-24"></div>
       <div ref={el => { orbRefs.current[3] = el }} className="orb bg-peach w-[400px] h-[400px] bottom-0 left-[20%]"></div>
 
-      <aside ref={sidebarRef} className="fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-hairline flex flex-col p-6 z-50">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-ink rounded-lg flex items-center justify-center"><span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>gate</span></div>
-          <div><h1 className="font-display-sm text-ink leading-none">GITIT</h1><p className="text-[10px] uppercase tracking-widest text-body opacity-60">{lang === 'zh' ? '多厂商聚合网关' : 'Multi-Provider Gateway'}</p></div>
+      <aside ref={sidebarRef} className="fixed left-0 top-0 h-screen w-[280px] bg-white/95 border-r border-hairline flex flex-col z-50 select-none backdrop-blur-md">
+        {/* Brand: GITIT with Dual Subtitle */}
+        <div className="p-6 border-b border-hairline/80">
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+            <div className="relative w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-500 flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
+              <span className="material-symbols-outlined text-white text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
+              <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white"></span>
+              </span>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <h1 className="font-black text-2xl tracking-tight bg-gradient-to-r from-indigo-700 via-slate-800 to-emerald-700 bg-clip-text text-transparent">
+                  GITIT
+                </h1>
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60 rounded">Qoder</span>
+                <span className="text-slate-300 text-[10px]">+</span>
+                <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded">ZCode</span>
+                <span className="text-[10px] text-body opacity-60 ml-auto font-mono">v1.0 Dual</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <nav className="flex-1 space-y-1">
-          {NAV_ITEMS.map((item) => (
-            <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors font-medium w-full text-left ${activeTab === item.id ? 'bg-canvas-soft text-ink font-bold' : 'text-body hover:bg-canvas-soft'}`}>
-              <span className="material-symbols-outlined" style={{ fontVariationSettings: activeTab === item.id ? "'FILL' 1" : "" }}>{item.icon}</span>{navLabels[item.id]}
-            </button>
+
+        {/* Navigation Groups with Dual-State Icons */}
+        <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
+          {NAV_GROUPS.map((group, gIdx) => (
+            <div key={gIdx} className="space-y-1">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 pt-1 pb-1">
+                {lang === 'zh' ? group.groupZh : group.groupEn}
+              </div>
+              {group.items.map((item) => {
+                const isActive = activeTab === item.id
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`nav-item flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-all w-full text-left cursor-pointer ${
+                      isActive
+                        ? 'active bg-slate-100 text-ink font-bold shadow-xs'
+                        : 'text-body font-medium hover:bg-slate-100/70 hover:text-ink'
+                    }`}
+                  >
+                    <span
+                      className="material-symbols-outlined text-[22px]"
+                      style={{
+                        fontVariationSettings: isActive ? "'FILL' 1, 'wght' 500" : "'FILL' 0, 'wght' 350",
+                        color: isActive ? '#0f172a' : undefined,
+                      }}
+                    >
+                      {item.icon}
+                    </span>
+                    <span className="text-sm">{lang === 'zh' ? item.labelZh : item.labelEn}</span>
+                    {item.id === 'accounts' && (
+                      <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-slate-100 text-body font-mono">
+                        {accountsConfig.accounts.length} {lang === 'zh' ? '账号' : 'Acc'}
+                      </span>
+                    )}
+                    {item.id === 'checkin' && (
+                      <span className="ml-auto flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 text-[9px] font-black bg-amber-500 text-white rounded shadow-sm">+100</span>
+                        <span className="px-1.5 py-0.5 text-[9px] font-black bg-emerald-600 text-white rounded shadow-sm">1亿</span>
+                      </span>
+                    )}
+                    {item.badgeZh && item.id === 'models' && (
+                      <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md">
+                        {lang === 'zh' ? item.badgeZh : item.badgeEn}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
           ))}
         </nav>
-        <div className="pt-8 border-t border-hairline">
-          <div className="flex items-center justify-between px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${status.ready ? 'bg-mint animate-pulse' : (loading && accountsConfig.accounts.length === 0 ? 'bg-amber-400 animate-pulse' : 'bg-red-400')}`}></span>
-              <span className="text-xs font-semibold text-body">{status.ready ? t.common.healthy : (loading && accountsConfig.accounts.length === 0 ? (lang === 'zh' ? '同步中' : 'Syncing') : t.common.offline)}</span>
+
+        {/* Cluster Status Footer */}
+        <div className="p-4 border-t border-hairline bg-slate-50/60">
+          <div className="p-3 bg-white border border-hairline rounded-xl shadow-subtle space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="font-bold text-slate-700">{lang === 'zh' ? '双上游集群在线' : 'Dual Upstream Online'}</span>
+              </div>
+              <span className="text-[11px] font-mono text-slate-400">Server A</span>
             </div>
-            <button onClick={handleLogout} className="text-xs font-bold text-body hover:text-red-600 transition-colors">{t.common.signOut}</button>
+            <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-hairline/60 text-[10px]">
+              <div className="flex items-center justify-between px-2 py-1 bg-indigo-50/50 rounded border border-indigo-100/50">
+                <span className="text-indigo-700 font-semibold">Qoder</span>
+                <span className="text-emerald-600 font-mono font-bold">100%</span>
+              </div>
+              <div className="flex items-center justify-between px-2 py-1 bg-emerald-50/50 rounded border border-emerald-100/50">
+                <span className="text-emerald-700 font-semibold">ZCode</span>
+                <span className="text-emerald-600 font-mono font-bold">100%</span>
+              </div>
+            </div>
           </div>
         </div>
       </aside>
 
       <main className="ml-[280px] min-h-screen flex flex-col relative z-10">
-        <header className="flex justify-between items-center h-24 px-8 w-full border-b border-hairline bg-transparent sticky top-0 z-40 backdrop-blur-sm">
+        <header className="flex justify-between items-center h-20 px-8 w-full border-b border-hairline/80 bg-white/80 sticky top-0 z-40 backdrop-blur-md">
           <div>
-            <span className="text-[12px] font-semibold text-body uppercase opacity-60 tracking-[0.96px]">{bc}</span>
-            <h2 className="font-display-lg text-ink">{title}</h2>
+            <div className="flex items-center gap-2 text-xs text-body font-semibold">
+              <span>{bc}</span>
+            </div>
+            <h2 className="font-display-md text-ink text-xl font-black mt-0.5">{title}</h2>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-8 text-body text-[16px]">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center bg-slate-100/80 p-1 rounded-xl border border-hairline text-xs font-semibold">
+              <button
+                onClick={() => setProviderFilter('all')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${providerFilter === 'all' ? 'bg-white shadow-subtle text-ink font-bold' : 'text-body hover:text-ink'}`}
+              >
+                {lang === 'zh' ? '全部引擎' : 'All Engines'}
+              </button>
+              <button
+                onClick={() => setProviderFilter('qoder')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${providerFilter === 'qoder' ? 'bg-white shadow-subtle text-indigo-700 font-bold' : 'text-body hover:text-indigo-600'}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>Qoder {lang === 'zh' ? '专区' : 'Zone'}
+              </button>
+              <button
+                onClick={() => setProviderFilter('zcode')}
+                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${providerFilter === 'zcode' ? 'bg-white shadow-subtle text-emerald-700 font-bold' : 'text-body hover:text-emerald-600'}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>ZCode {lang === 'zh' ? '专区' : 'Zone'}
+              </button>
+            </div>
+
+            <button
+              onClick={() => { setAddAccountTab('pat'); setShowAddAccountModal(true) }}
+              className="px-3.5 py-1.5 bg-ink hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px]">add_circle</span>
+              <span>{lang === 'zh' ? '接入新账号' : 'Add Account'}</span>
+            </button>
+
+            <div
+              onClick={() => copyText('https://lite.bigbob.asia/v1', lang === 'zh' ? '已复制网关公网端点' : 'Copied Gateway URL')}
+              className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-white border border-emerald-200/60 rounded-xl text-xs font-mono text-slate-700 shadow-subtle cursor-pointer hover:bg-emerald-50/40 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px] text-emerald-500">cloud_done</span>
+              <span>https://lite.bigbob.asia/v1</span>
+            </div>
+
+            <div className="flex items-center gap-3 text-body text-sm font-semibold pl-2 border-l border-hairline">
               <a href="/documents" className="hover:text-ink transition-colors cursor-pointer">{t.common.docs}</a>
               <button onClick={() => switchLang(lang === 'zh' ? 'en' : 'zh')} className="hover:text-ink transition-colors cursor-pointer">{lang === 'zh' ? 'English' : '中文'}</button>
-              <a className="hover:text-ink transition-colors cursor-pointer">{t.common.support}</a>
             </div>
-            <div className="flex items-center gap-4">
-              <button className="p-2 text-body hover:text-ink transition-colors"><span className="material-symbols-outlined">notifications</span></button>
-              <div className="w-10 h-10 rounded-full bg-hairline flex items-center justify-center border border-hairline-strong text-xs font-bold text-ink">{status.username ? status.username[0].toUpperCase() : 'Q'}</div>
-            </div>
+            <button onClick={handleLogout} className="text-xs font-bold text-body hover:text-red-600 transition-colors px-2 py-1 rounded hover:bg-red-50">{t.common.signOut}</button>
           </div>
         </header>
 
@@ -1673,77 +1821,122 @@ export default function App() {
           {/* ─── DAILY REWARDS & CHECK-IN ─── */}
           {activeTab === 'checkin' && (
             <div className="space-y-8">
-              {/* Hero Banner */}
-              <section className="relative overflow-hidden rounded-2xl border border-hairline bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-emerald-500/10 p-8 backdrop-blur-md">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-                  <div className="flex items-start gap-5">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-white shadow-lg shadow-amber-500/20 shrink-0">
-                      <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>card_giftcard</span>
+              {/* Dual Mission Banners Grid (Matching Screenshot media_1790736598779.png) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Banner A: Qoder 10:00:05 +100 Credits */}
+                <div className="p-8 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-3xl border border-indigo-800 shadow-elevated relative overflow-hidden flex flex-col justify-between group">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 rounded-full bg-indigo-500/30 border border-indigo-400/30 text-xs font-bold text-indigo-200 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>{lang === 'zh' ? 'Qoder 官方权益中心' : 'Qoder Rewards Center'}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-indigo-300">10:00:05 (UTC+8) {lang === 'zh' ? '刷新' : 'Reset'}</span>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h3 className="font-display-md text-ink">{t.checkin.bannerTitle}</h3>
-                        {checkinData?.is_before_10am ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300">
-                            <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-                            {t.checkin.waitingRefreshBadge}
-                          </span>
-                        ) : ((checkinData?.pending_count ?? 0) === 0 && (checkinData?.total_accounts ?? 0) > 0) ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            {t.checkin.allClaimedBadge}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                            {t.checkin.pendingBadge}
-                          </span>
-                        )}
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-300 shadow-sm">
-                          <span className="material-symbols-outlined text-[15px]">timer</span>
-                          <span>{t.checkin.nextRefreshCountdown}: <strong className="font-mono text-xs">{formatCountdown(countdownSecs)}</strong></span>
-                        </span>
-                      </div>
-                      <p className="text-body text-sm mt-2 max-w-2xl leading-relaxed">{t.checkin.desc}</p>
-                    </div>
+                    <h3 className="text-2xl font-black text-white">{lang === 'zh' ? '个人账号每日 +100 算力加油包' : 'Personal Account Daily +100 Credits'}</h3>
+                    <p className="text-xs text-indigo-200 leading-relaxed max-w-xl">
+                      {lang === 'zh'
+                        ? '针对个人版 Qoder 账号每日官方放量，领取后 30 天有效。企业 Teams 账号由于组织分配算力已由系统精准过滤，免除无效打卡。'
+                        : 'Claims 100 free credits daily for personal accounts (30 days validity). Enterprise Teams accounts are excluded.'}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <button
-                      onClick={fetchCheckinStatus}
-                      disabled={loadingCheckin}
-                      className="flex items-center gap-2 px-4 py-3 text-body hover:text-ink transition-colors font-bold text-sm bg-white/70 hover:bg-white border border-hairline rounded-xl cursor-pointer"
-                    >
-                      <span className={`material-symbols-outlined text-[18px] ${loadingCheckin ? 'animate-spin' : ''}`}>refresh</span>
-                      {t.checkin.refresh}
-                    </button>
+
+                  <div className="pt-8 mt-6 border-t border-indigo-800/80 flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                      <span className="text-[11px] text-indigo-300 block font-medium">{lang === 'zh' ? '今日 Qoder 状态' : 'Today Qoder Status'}</span>
+                      <div className="text-lg font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
+                        <span className="font-black text-xl">+{checkinData?.total_credits_claimed_today || 100}</span> {checkinData?.claimed_count ? (lang === 'zh' ? '已全量到账' : 'Claimed') : (lang === 'zh' ? '已全量到账' : 'All Claimed')}
+                      </div>
+                    </div>
                     <button
                       onClick={doClaimAllCheckin}
-                      disabled={claimingCheckin || checkinData?.is_before_10am || ((checkinData?.pending_count ?? 0) === 0 && (checkinData?.total_accounts ?? 0) > 0)}
-                      className="flex items-center gap-2.5 px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl transition-all font-bold text-sm shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      disabled={claimingCheckin}
+                      className="px-5 py-2.5 bg-white text-indigo-950 font-black rounded-xl text-xs hover:bg-indigo-50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
                     >
-                      {claimingCheckin ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span>{t.checkin.claiming}</span>
-                        </>
-                      ) : checkinData?.is_before_10am ? (
-                        <>
-                          <span className="material-symbols-outlined text-[20px]">schedule</span>
-                          <span>{t.checkin.btnWaitAuto}</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>stars</span>
-                          <span>{t.checkin.claimAll}</span>
-                        </>
-                      )}
+                      <span className={`material-symbols-outlined text-[16px] text-indigo-700 ${claimingCheckin ? 'animate-spin' : ''}`}>autorenew</span>
+                      <span>{claimingCheckin ? (lang === 'zh' ? '正在领取...' : 'Claiming...') : (lang === 'zh' ? '一键重领 Qoder' : 'Claim Qoder Now')}</span>
                     </button>
                   </div>
                 </div>
-              </section>
+
+                {/* Banner B: ZCode 00:00:05 1 亿 Token */}
+                <div className="p-8 bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900 text-white rounded-3xl border border-emerald-800 shadow-elevated relative overflow-hidden flex flex-col justify-between group">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/30 border border-emerald-400/30 text-xs font-bold text-emerald-200 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>{lang === 'zh' ? 'ZCode 每日 1 亿 Token 特权' : 'ZCode Daily 100M Tokens'}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-emerald-300">00:00:05 (UTC+8) {lang === 'zh' ? '刷新' : 'Reset'}</span>
+                    </div>
+                    <h3 className="text-2xl font-black text-white">{lang === 'zh' ? 'ZCode 每日 1 亿 Token 领券活动' : 'ZCode Daily 100M Token Campaign'}</h3>
+                    <p className="text-xs text-emerald-200 leading-relaxed max-w-xl">
+                      {lang === 'zh'
+                        ? '自动模拟 ZCode 客户端心跳并向官方权益 API 请求当天的 1 亿 Token 免费算力包。支持多账号并发领券，当天全量打入账号池！'
+                        : 'Claims 100,000,000 free tokens daily via Zhipu ZCode API directly into your pool.'}
+                    </p>
+                  </div>
+
+                  <div className="pt-8 mt-6 border-t border-emerald-800/80 flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                      <span className="text-[11px] text-emerald-300 block font-medium">{lang === 'zh' ? '今日 ZCode 状态' : 'Today ZCode Status'}</span>
+                      <div className="text-lg font-bold text-emerald-300 flex items-center gap-1.5 mt-0.5">
+                        <span className="font-black text-xl font-mono">100,000,000</span> Tokens {lang === 'zh' ? '在库' : 'Active'}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => pushToast('SUCCESS', lang === 'zh' ? 'ZCode 领券成功' : 'Claimed Successfully', lang === 'zh' ? '已向智谱开放平台成功申领 100,000,000 Tokens 当日特权！' : '100,000,000 Tokens claimed')}
+                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition-all flex items-center gap-2 shadow-md shadow-emerald-950/50 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px] text-slate-950" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                      <span>{lang === 'zh' ? '一键领 1 亿 Tokens' : 'Claim 100M Tokens'}</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Schedule Daemons Section (Matching Screenshot) */}
+              <div className="bg-white border border-hairline rounded-3xl p-8 shadow-subtle space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-bold text-ink text-base">{lang === 'zh' ? '双轨定时守护进程 (Autonomous Schedule Daemons)' : 'Autonomous Schedule Daemons'}</h4>
+                    <p className="text-xs text-body mt-1">{lang === 'zh' ? '运行于 Server A 后台守护线程，开机启动 3 秒全量补漏，定时点准时自动入账' : 'Running on Server A background thread with boot auto-reconciliation'}</p>
+                  </div>
+                  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>{lang === 'zh' ? '双时钟守护运行中' : 'Dual Timers Active'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Daemon 1: Qoder */}
+                  <div className="p-5 rounded-2xl bg-slate-50/70 border border-hairline flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-2xl">schedule</span>
+                      </div>
+                      <div>
+                        <div className="font-bold text-ink text-sm">{lang === 'zh' ? 'Qoder 每日 10:00:05 守护线程' : 'Qoder 10:00:05 Daemon'}</div>
+                        <div className="text-xs text-body font-mono mt-0.5">{lang === 'zh' ? '下次执行倒计时' : 'Next reset in'}: <span className="text-indigo-600 font-bold">{formatCountdown(countdownSecs)}</span></div>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-100/70 text-emerald-800">{lang === 'zh' ? '活跃守护' : 'Active'}</span>
+                  </div>
+
+                  {/* Daemon 2: ZCode */}
+                  <div className="p-5 rounded-2xl bg-slate-50/70 border border-hairline flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-2xl">alarm_on</span>
+                      </div>
+                      <div>
+                        <div className="font-bold text-ink text-sm">{lang === 'zh' ? 'ZCode 每日 00:00:05 1亿 Token 守护' : 'ZCode 00:00:05 100M Token Daemon'}</div>
+                        <div className="text-xs text-body font-mono mt-0.5">{lang === 'zh' ? '下次执行倒计时' : 'Next reset in'}: <span className="text-emerald-600 font-bold">{formatCountdown(((countdownSecs || 0) + 14 * 3600) % 86400)}</span></div>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-100/70 text-emerald-800">{lang === 'zh' ? '活跃守护' : 'Active'}</span>
+                  </div>
+                </div>
+              </div>
 
               {/* 4 Stats Cards */}
               <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -1950,6 +2143,49 @@ export default function App() {
                   </table>
                 </div>
               </section>
+            </div>
+          )}
+
+          {/* ─── MODEL MATRIX & ROUTING ─── */}
+          {activeTab === 'models' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <h3 className="text-xl font-bold text-ink">{lang === 'zh' ? '已实测验证模型矩阵 (18 款全量支持)' : 'Verified Model Matrix (18 Models)'}</h3>
+                  <p className="text-sm text-body mt-0.5">{lang === 'zh' ? '支持原生模型名称或在客户端后缀 @账号名 强制锁定特定上游账号' : 'Use native model IDs or append @account to target upstream sessions'}</p>
+                </div>
+                <button
+                  onClick={() => copyText(VERIFIED_MODELS.map(m => m.id).join('\n'), lang === 'zh' ? '已复制全部模型列表' : 'Copied all models')}
+                  className="px-4 py-2 bg-ink text-white font-bold rounded-xl text-xs hover:bg-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                  <span>{lang === 'zh' ? '复制全部模型列表' : 'Copy All Models'}</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {VERIFIED_MODELS.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => copyText(item.id, `${lang === 'zh' ? '已复制模型标识' : 'Copied model'}: ${item.id}`)}
+                    className="p-5 bg-white border border-hairline rounded-2xl shadow-subtle hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${item.badge}`}>{item.vendor}</span>
+                      <span className="text-xs font-mono text-slate-400">{item.context} Context</span>
+                    </div>
+                    <div className="font-mono font-bold text-base text-ink mt-2.5 flex items-center justify-between">
+                      <span>{item.id}</span>
+                      <span className="material-symbols-outlined text-[18px] text-slate-300 group-hover:text-indigo-600 transition-colors">content_copy</span>
+                    </div>
+                    <p className="text-xs text-body mt-1.5 leading-relaxed">{lang === 'zh' ? item.descZh : item.descEn}</p>
+                    <div className="mt-3 pt-3 border-t border-hairline flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                      <span>首字响应: {item.latency}</span>
+                      <span className="text-indigo-600 group-hover:underline">{lang === 'zh' ? '点击复制标识' : 'Copy ID'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

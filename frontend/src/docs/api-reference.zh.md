@@ -1,56 +1,91 @@
 # API 参考
 
-QoderGate 提供 OpenAI 兼容的 Chat Completions 接口。
+GITIT 提供完全符合 OpenAI 标准的 Chat Completions 与 Models 接口，向下游工具（Cursor、Codex++、Cherry Studio、NextChat、ZCode）提供多厂商聚合算力。
 
-## Base URL
+## 服务端点 (Base URL)
 
-```text
-http://127.0.0.1:5050
+- **云端公网端点**：`https://lite.bigbob.asia/v1`
+- **本地运行端点**：`http://127.0.0.1:5050/v1`
+
+## 模型列表查询
+
+```http
+GET /v1/models
+Authorization: Bearer <your-api-key>
 ```
 
-## Chat Completions
+返回当前网关已聚合接入的全部可用模型（包含 Qoder 与 ZCode 全系列）。
+
+## 聊天补全接口 (Chat Completions)
 
 ```http
 POST /v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer <your-api-key>
 ```
 
-### 请求体
+### 核心请求参数
 
 | 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `model` | string | 否 | 默认是 `lite`。 |
-| `messages` | array | 是 | OpenAI 风格消息列表。 |
-| `stream` | boolean | 否 | 为 `true` 时启用 SSE 流式输出。 |
+| :--- | :--- | :--- | :--- |
+| `model` | string | 是 | 模型名称，支持原生模型标识或定向后缀（如 `kimi-k3`、`glm-4-flash`、`kimi-k3@liuzhuyun`）。 |
+| `messages` | array | 是 | 标准 OpenAI 消息数组，包含 `role` 与 `content`。 |
+| `stream` | boolean | 否 | 是否启用 SSE 流式输出，默认为 `false`。 |
+| `temperature` | number | 否 | 采样温度，默认为 `0.7`。 |
 
-### 非流式示例
+### 18+ 款主流模型矩阵
+
+| 厂商 | 模型标识 | 上下文 | 特点 |
+| :--- | :--- | :--- | :--- |
+| **Qoder** | `kimi-k3` | 1M | 月暗旗舰，超长代码深度推理 |
+| **Qoder** | `deepseek-v4-pro` | 1M | 顶级架构设计与严谨逻辑 |
+| **Qoder** | `qwen-3.8-max` | 1M | 阿里通义全能旗舰 |
+| **Qoder** | `deepseek-flash` | 128K | 极速首字补全 |
+| **Qoder** | `kimi-k2.8` | 200K | 轻量高性价比 |
+| **ZCode** | `glm-4-flash` | 128K | 智谱极速模型，毫秒级响应 |
+| **ZCode** | `glm-4` | 128K | 经典高智能通用模型 |
+| **ZCode** | `glm-4-plus` | 128K | 高阶语义理解与长文本推理 |
+| **ZCode** | `glm-4-air` | 128K | 均衡轻量模型 |
+
+### 定向路由调用语法
+除了直接传入模型名称外，GITIT 支持灵活的定向语法：
+- `kimi-k3@liuzhuyun`：强制使用名为 `liuzhuyun` 的账号发起请求。
+- `glm-4-flash@zcode`：强制分发给 `zcode` 厂商的账号池。
+
+### 流式请求示例 (cURL)
 
 ```bash
-curl http://127.0.0.1:5050/v1/chat/completions \
+curl https://lite.bigbob.asia/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer qg_live_xxx" \
+  -H "Authorization: Bearer qg_live_42adacf1b759ee4e6e8a7ea99f9eb350" \
   -d '{
-    "model": "lite",
-    "stream": false,
-    "messages": [{ "role": "user", "content": "Explain QoderGate" }]
-  }'
-```
-
-### 流式示例
-
-```bash
-curl http://127.0.0.1:5050/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "lite",
+    "model": "glm-4-flash",
     "stream": true,
-    "messages": [{ "role": "user", "content": "Stream a short answer" }]
+    "messages": [
+      {"role": "system", "content": "You are a senior engineer."},
+      {"role": "user", "content": "用 Python 写一个异步生产者消费者模型"}
+    ]
   }'
 ```
 
-## 错误码
+### Python SDK 接入示例
 
-| 状态码 | 含义 |
-| --- | --- |
-| `401` | 缺少或传入了错误的 API Key。 |
-| `400` | 当前没有可用的 Qoder 账号。 |
-| `502` | 所有可用账号请求上游都失败。 |
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://lite.bigbob.asia/v1",
+    api_key="qg_live_42adacf1b759ee4e6e8a7ea99f9eb350"
+)
+
+response = client.chat.completions.create(
+    model="kimi-k3",
+    messages=[{"role": "user", "content": "写一个基于 FastAPI 的接口"}],
+    stream=True
+)
+
+for chunk in response:
+    content = chunk.choices[0].delta.content
+    if content:
+        print(content, end="", flush=True)
+```

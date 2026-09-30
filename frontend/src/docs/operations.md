@@ -1,46 +1,31 @@
-# Operations
+# Operations & Deployment
 
-Operational notes for running QoderGate locally.
+Operational procedures, database maintenance, and security guidelines for GITIT.
 
-## SQLite Storage
+## Deployment Modes
 
-QoderGate stores runtime data in:
+### 1. Cloud Production Deployment (Server A)
+- **Host**: Linux Server A (`35.212.220.77:22`), Docker mapped to port `5050`.
+- **Public Domain**: `https://lite.bigbob.asia`.
+- **Automated Deployer**: Run `python scripts/deploy_remote.py` for hash-based differential upload and hot-reloading.
 
+### 2. Local Environment
+- **Host**: Windows 11 with `start.bat` or `uv run qoder2api`.
+- Default port: `5050`.
+
+## Database Management
+
+Persistence path:
 ```text
 ~/.qoder/qoder2api.db
 ```
 
-The database contains accounts, allowed API keys, and settings.
-
-## Backup
-
-Stop the server and copy the database file:
-
+Backup via PowerShell:
 ```powershell
-Copy-Item "$env:USERPROFILE\.qoder\qoder2api.db" "$env:USERPROFILE\Desktop\qoder2api.db.backup"
+Copy-Item "$env:USERPROFILE\.qoder\qoder2api.db" "$env:USERPROFILE\Desktop\gitit_db_backup.db"
 ```
 
-## Reset the Gateway Token
+## Cloud Registrar Safety Policy
 
-The gateway token lives in the `settings` table under `gateway_token`.
-
-If you lock yourself out, update the value directly in SQLite or remove the database to reinitialize defaults.
-
-## Troubleshooting
-
-### 401 Unauthorized
-
-- WebUI route: check `X-Gateway-Token`.
-- API route: check `Authorization: Bearer <key>`.
-
-### No Active Session
-
-Import an account or add a PAT from the Dashboard.
-
-### Account Quota Exceeded
-
-Disable the exhausted account or import another account and let rotation continue.
-
-### Local Auth Import Failed
-
-Make sure Qoder CLI has been logged in on this machine and the local auth files exist.
+- The automated registrar is strictly restricted to local deployment.
+- On Cloud Server A, `ENABLE_REGISTRAR=false` is enforced. Any incoming request to `/ui/registrar/*` is blocked with `403 Forbidden`.

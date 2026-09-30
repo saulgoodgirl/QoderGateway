@@ -1,35 +1,29 @@
-# Account Pool
+# Account Pool & Autonomous Maintenance
 
-The account pool lets QoderGate route requests through multiple Qoder accounts and recover when one account fails.
+GITIT unifies multiple upstream provider accounts (domestic Qoder, Zhipu ZCode, and custom OpenAI-compatible endpoints) into a single resilient routing pool with automatic failover.
 
-## Import Methods
+## Supported Providers & Import Methods
 
-### Auto Import
+| Provider | Credential | Method |
+| :--- | :--- | :--- |
+| **Qoder** | PAT (`pt-...`) / OAuth Session | Paste PAT in console or click Auto Import locally |
+| **ZCode** | Zhipu API Key (`sk-...` / ID.Secret) | Enter API Key or extract from `%LOCALAPPDATA%\ZCode` |
+| **Custom** | Standard Bearer Key + Base URL | Enter custom OpenAI endpoint |
 
-Reads the current local Qoder auth session from your machine and imports it into SQLite.
+## Three API Routing Modes
 
-### Add PAT
+- **All (General Pool)**: Participates in global load-balancing and auto-failover.
+- **Dedicated**: Excluded from generic calls; only triggered when requested via `model: "<model>@<account_name>"`.
+- **Disabled**: Excluded from all API traffic, while continuing to receive daily autonomous check-in rewards!
 
-Exchanges a Qoder Personal Access Token for a usable session and stores it in the account pool.
+## Dual Autonomous Maintenance Daemons
 
-## Deduplication
+1. **Qoder 10:00:05 (UTC+8)**: Automatically claims **+100 Credits** daily for personal accounts (30 days validity). Enterprise Teams accounts are automatically bypassed.
+2. **ZCode 00:00:05 (UTC+8)**: Automatically claims **100,000,000 Tokens** daily for ZCode accounts.
+3. **Boot-time Reconciliation**: Runs 3 seconds after startup to claim any missed rewards immediately.
 
-Accounts are deduplicated by `uid`. Re-importing the same user updates session data instead of creating duplicates.
+## Quota Tracking
 
-## Enable and Disable
-
-Disabled accounts stay in SQLite but are skipped during routing.
-
-## Active Account
-
-The active account is the first account used for a request. If it fails, QoderGate rotates to another enabled account.
-
-## Quota Fields
-
-| Field | Meaning |
-| --- | --- |
-| `quota` | Current quota value reported by Qoder. |
-| `is_quota_exceeded` | Whether the account is over quota. |
-| `plan` | Account plan identifier. |
-| `user_tag` | Display label from Qoder. |
-| `next_reset_at` | When quota is expected to reset. |
+- `provider`: Upstream provider identifier (`qoder`, `zcode`, `custom`).
+- `quota`: Balance in Credits (Qoder) or Tokens (ZCode).
+- `api_mode`: Routing configuration (`all`, `dedicated`, `disabled`).

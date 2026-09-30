@@ -1,38 +1,29 @@
-# Architecture
+# Architecture & Routing Engine
 
-QoderGate bridges OpenAI-compatible clients to Qoder sessions.
+GITIT is a high-performance multi-provider AI aggregation gateway engineered with Python FastAPI and React.
 
 ## Request Flow
 
 ```text
-Client
-  -> FastAPI /v1/chat/completions
-  -> API key validation
-  -> SQLite account router
-  -> Qoder Bearer signing
-  -> Qoder upstream API
-  -> OpenAI-compatible response
+Client (Cursor / Codex++ / Cherry Studio / OpenAI SDK)
+  │
+  ▼ POST /v1/chat/completions
+GITIT Unified Core
+  ├─ 1. Bearer API Key validation & sub-pool lookup
+  ├─ 2. Routing selector (model@account or load-balanced pool)
+  ├─ 3. Upstream Dispatcher:
+  │    ├─ QoderEngine (PAT exchange, signature, quota management)
+  │    ├─ ZCodeEngine (AES decryption, GLM SSE stream adaptation)
+  │    └─ CustomEngine (OpenAI compatible pass-through)
+  ▼
+Upstream AI Providers (Qoder / Zhipu AI / Custom)
 ```
 
-## Backend Components
+## Backend Modules
 
-| Module | Responsibility |
-| --- | --- |
-| `app.py` | FastAPI routes, UI auth, request routing. |
-| `accounts.py` | SQLite account CRUD and active session selection. |
-| `auth.py` | PAT exchange, local auth import, quota query. |
-| `bridge.py` | OpenAI-compatible stream and response conversion. |
-| `signature.py` | Bearer signing implementation. |
-| `database.py` | SQLite schema and connection helpers. |
-
-## Frontend Components
-
-The WebUI is built with Vite, React, Tailwind CSS, GSAP, and Markdown rendering.
-
-It is compiled into:
-
-```text
-src/qoder2api/static
-```
-
-FastAPI serves the compiled `index.html` and static assets directly.
+- `app.py`: Main application, `/v1` endpoints, `/ui` APIs, and cloud registrar defense.
+- `accounts.py`: Account CRUD, failover logic, and targeted routing (`model@account`).
+- `zcode.py`: ZCode AES credentials decryption and GLM stream bridging.
+- `auth.py`: Qoder PAT exchange and session signature.
+- `checkin.py`: Dual autonomous schedule daemons for daily claiming.
+- `database.py`: Multi-provider SQLite persistence.

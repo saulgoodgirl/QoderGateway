@@ -1,100 +1,101 @@
 # Quickstart
 
-Start QoderGateway, manage Qoder accounts, and complete your first OpenAI-compatible API request.
+This page explains how to get started with the GITIT Multi-Provider AI Aggregation Gateway, manage Qoder and ZCode account pools, and complete your first unified API request.
 
-## Quickstart Flow
+## Quick Overview
 
-Follow these steps:
+Follow these three steps:
 
-- Start QoderGateway.
-- Manage Qoder accounts and request routing.
-- Complete your first API call.
+- Start GITIT (cloud-hosted or locally).
+- Manage multi-provider accounts (Qoder PATs, ZCode credentials) and API routing modes.
+- Complete your first OpenAI-compatible API call or connect client IDEs.
 
-## Install and Start
+## Installation & Startup
+
+### Option 1: Cloud Deployment (Recommended)
+If GITIT is deployed on Server A (`35.212.220.77`) with Cloudflare, access the console directly:
+
+```text
+https://lite.bigbob.asia/console
+```
+
+The unified API endpoint is:
+```text
+https://lite.bigbob.asia/v1
+```
+
+### Option 2: Local Deployment
 
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/bzym2/QoderGateway.git
+git clone https://github.com/saulgoodgirl/QoderGateway.git
 cd QoderGateway
 uv sync
 ```
 
-Then start the server:
+Launch with `start.bat` on Windows or run:
 
 ```powershell
 uv run qoder2api
 ```
 
-The WebUI is served at:
+Web Console: `http://127.0.0.1:5050/console`
 
-```text
-http://127.0.0.1:5050/
-```
+## Admin Password Configuration
 
-## Login and Change the Default Password
-
-The default administrator password is:
+The default gateway token is:
 
 ```text
 admin
 ```
 
-You can use `admin` for the first login.
-
-Change it immediately before using the gateway seriously. Copy the environment template:
-
-```bash
-mv .env.example .env
-```
-
-Then set a strong administrator password in `.env`:
+In production, change your admin password in `.env`:
 
 ```env
 QODER_ADMIN_PASSWORD=your-strong-password
 ```
 
-This password protects all management routes under `/ui/*` with the `X-Gateway-Token` header.
+This token protects all `/ui/*` administrative endpoints.
 
-## Manage Qoder Accounts
+## Multi-Provider Account Pool
 
-Use one of these options:
+GITIT natively unifies Qoder and Zhipu ZCode:
 
-- Click **Auto Import** to import the current local Qoder auth session.
-- Paste a Qoder Personal Access Token into **Add PAT**.
+### 1. Adding Qoder Accounts
+- Click **Add Account**, select **Qoder**, and enter your PAT (`pt-...`).
+- Or use **Auto Import** in local mode to extract local Qoder sessions.
 
-Imported accounts are stored in SQLite and deduplicated by `uid`.
+### 2. Adding ZCode Accounts
+- Click **Add Account**, select **ZCode**, and enter your Zhipu API key or exported credentials.
 
-## First API Call
+### 3. API Routing Modes
+- **All (General Pool)**: Participates in global load-balancing and auto-failover.
+- **Dedicated**: Only called when explicitly specified via `model@account` syntax.
+- **Disabled**: Excluded from API routing, while continuing to receive daily automated maintenance and claiming!
 
-Once an account is active, send a chat completion request:
+## Dual Autonomous Maintenance Daemons
+
+- **Qoder Rewards**: 10:00:05 (UTC+8) claims **+100 Credits** daily for personal accounts (30 days validity).
+- **ZCode Rewards**: 00:00:05 (UTC+8) claims **100,000,000 Tokens** daily.
+
+## First API Request
 
 ```bash
-curl http://127.0.0.1:5050/v1/chat/completions \
+curl https://lite.bigbob.asia/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer qg_live_42adacf1b759ee4e6e8a7ea99f9eb350" \
   -d '{
-    "model": "lite",
-    "messages": [{ "role": "user", "content": "Say hello" }],
-    "stream": false
+    "model": "glm-4-flash",
+    "messages": [{ "role": "user", "content": "Hello from GITIT" }],
+    "stream": true
   }'
 ```
 
-If API key auth is enabled, also pass:
-
+### Targeted Account Routing
 ```bash
--H "Authorization: Bearer <your-api-key>"
+-d '{
+  "model": "kimi-k3@liuzhuyun",
+  "messages": [{ "role": "user", "content": "Analyze this code" }]
+}'
 ```
-
-## Verify Routing
-
-Open **Service Logs**. Every request logs the account used for routing, for example:
-
-```text
-Request routing via account: Alice (019ec5c6-4bb0-7c1c-bf93-5209e1367f2b)
-```
-
-## Next Steps
-
-- Read **Authentication** before exposing the gateway to another machine.
-- Read **Account Pool** to understand rotation and quota behavior.
-- Read **API Reference** if you want to connect an OpenAI SDK client.

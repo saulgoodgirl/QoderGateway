@@ -1,41 +1,30 @@
 # Authentication
 
-QoderGate has two authentication layers: one for the management console and one for external API clients.
+GITIT employs a two-layer security model that completely isolates administrative controls from client-facing API consumption.
 
-## Management Console Token
+## Layer 1: Admin Console Token (`X-Gateway-Token`)
 
-The WebUI uses the gateway token you enter on login. Frontend requests send it as:
+Controls access to all `/ui/*` management endpoints:
+- Dashboard status and cluster health
+- Multi-provider account pool management
+- Autonomous check-in and claiming controls
+- API key generation and sub-pool bindings
+- System logs
 
-```http
-X-Gateway-Token: admin
+Configure in `.env`:
+```env
+QODER_ADMIN_PASSWORD=your-secure-password
 ```
 
-This protects routes such as:
+## Layer 2: External Client Bearer Keys
 
-- `/ui/status`
-- `/ui/accounts`
-- `/ui/config`
-- `/ui/logs`
-
-## External API Keys
-
-The OpenAI-compatible API can optionally require Bearer keys.
-
-When enabled, clients must send:
+Clients authenticate using standard Bearer tokens:
 
 ```http
-Authorization: Bearer <allowed-api-key>
+Authorization: Bearer <qg_live_xxx>
 ```
 
-## Which Token Should I Use?
-
-| Use case | Header | Scope |
-| --- | --- | --- |
-| WebUI management | `X-Gateway-Token` | `/ui/*` routes |
-| OpenAI-compatible calls | `Authorization` | `/v1/chat/completions` |
-
-## Recommended Setup
-
-- Keep the management token private.
-- Enable API key auth before exposing the gateway to other machines.
-- Rotate API keys if they are shared in logs or scripts.
+### Sub-Pool Binding
+Each API key can either:
+- Dispatch requests across the entire account pool (default).
+- Bind exclusively to a dedicated upstream account for isolated quota consumption.

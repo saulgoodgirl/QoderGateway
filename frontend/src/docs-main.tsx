@@ -119,7 +119,7 @@ function DocsApp() {
           <span className="docs-brand-icon">
             <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1", fontSize: 20 }}>gate</span>
           </span>
-          <span>{lang === 'zh' ? 'QoderGate 文档' : 'QoderGate Docs'}</span>
+          <span>{lang === 'zh' ? 'GITIT 文档' : 'GITIT Docs'}</span>
         </a>
         <div className="docs-search">
           <span className="material-symbols-outlined">search</span>
