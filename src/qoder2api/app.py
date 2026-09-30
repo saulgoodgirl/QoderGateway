@@ -8,7 +8,7 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, Header, Depends, Body, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .auth import SessionContext, create_session, load_local_session
@@ -60,9 +60,26 @@ BASE_DIR = os.path.dirname(__file__)
 INDEX_HTML = Path(BASE_DIR) / "static" / "index.html"
 CONSOLE_HTML = Path(BASE_DIR) / "static" / "console.html"
 DOCS_HTML = Path(BASE_DIR) / "static" / "docs.html"
+FAVICON_SVG = Path(BASE_DIR) / "static" / "favicon.svg"
+ICONS_SVG = Path(BASE_DIR) / "static" / "icons.svg"
 
 app = FastAPI(title="GETIT Gateway", description="GETIT · Universal Multi-Provider AI Aggregation Gateway")
 app.mount("/assets", StaticFiles(directory=os.path.join(BASE_DIR, "static", "assets")), name="assets")
+
+
+@app.get("/favicon.svg", include_in_schema=False)
+@app.get("/favicon.ico", include_in_schema=False)
+async def get_favicon():
+    if FAVICON_SVG.exists():
+        return FileResponse(FAVICON_SVG, media_type="image/svg+xml")
+    return Response(status_code=404)
+
+
+@app.get("/icons.svg", include_in_schema=False)
+async def get_icons():
+    if ICONS_SVG.exists():
+        return FileResponse(ICONS_SVG, media_type="image/svg+xml")
+    return Response(status_code=404)
 
 
 @app.on_event("startup")
