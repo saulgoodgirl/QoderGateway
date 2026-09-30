@@ -794,40 +794,44 @@ export default function App() {
       )
     }
 
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(doToast).catch(() => {
-        try {
-          const textArea = document.createElement("textarea")
-          textArea.value = text
-          textArea.style.position = "fixed"
-          textArea.style.top = "-9999px"
-          textArea.style.left = "-9999px"
-          document.body.appendChild(textArea)
-          textArea.focus()
-          textArea.select()
-          document.execCommand('copy')
-          document.body.removeChild(textArea)
-          doToast()
-        } catch {
-          pushToast('ERROR', lang === 'zh' ? '复制失败' : 'Copy Failed', text)
-        }
-      })
-    } else {
+    const fallbackCopy = () => {
       try {
         const textArea = document.createElement("textarea")
         textArea.value = text
+        textArea.setAttribute("readonly", "")
         textArea.style.position = "fixed"
-        textArea.style.top = "-9999px"
-        textArea.style.left = "-9999px"
+        textArea.style.top = "0"
+        textArea.style.left = "0"
+        textArea.style.width = "2em"
+        textArea.style.height = "2em"
+        textArea.style.padding = "0"
+        textArea.style.border = "none"
+        textArea.style.outline = "none"
+        textArea.style.boxShadow = "none"
+        textArea.style.background = "transparent"
+        textArea.style.opacity = "0"
         document.body.appendChild(textArea)
         textArea.focus()
         textArea.select()
-        document.execCommand('copy')
+        textArea.setSelectionRange(0, text.length)
+        const successful = document.execCommand('copy')
         document.body.removeChild(textArea)
-        doToast()
+        if (successful) {
+          doToast()
+        } else {
+          window.prompt(lang === 'zh' ? '请按 Ctrl+C 复制端点:' : 'Copy to clipboard: Ctrl+C, Enter', text)
+        }
       } catch {
-        pushToast('ERROR', lang === 'zh' ? '复制失败' : 'Copy Failed', text)
+        window.prompt(lang === 'zh' ? '请按 Ctrl+C 复制端点:' : 'Copy to clipboard: Ctrl+C, Enter', text)
       }
+    }
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(doToast).catch(() => {
+        fallbackCopy()
+      })
+    } else {
+      fallbackCopy()
     }
   }, [lang, pushToast])
 
@@ -1609,18 +1613,10 @@ export default function App() {
                 <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white"></span>
               </span>
             </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="font-black text-xl tracking-tight bg-gradient-to-r from-indigo-700 via-slate-800 to-emerald-700 bg-clip-text text-transparent">
-                  GITIT
-                </h1>
-              </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60 rounded">Qoder</span>
-                <span className="text-slate-300 text-[10px]">+</span>
-                <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 rounded">ZCode</span>
-                <span className="text-[10px] text-body opacity-60 ml-auto font-mono">v1.0 Dual</span>
-              </div>
+            <div className="flex flex-col justify-center">
+              <h1 className="font-black text-xl tracking-tight bg-gradient-to-r from-indigo-700 via-slate-800 to-emerald-700 bg-clip-text text-transparent leading-none">
+                GITIT
+              </h1>
             </div>
           </div>
         </div>
@@ -1737,8 +1733,8 @@ export default function App() {
             </button>
 
             {(() => {
-              const currentEndpoint = typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost:5173')
-                ? `${window.location.origin}/v1`
+              const currentEndpoint = typeof window !== 'undefined' && window.location?.protocol?.startsWith('http') && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')
+                ? (window.location.port === '5050' ? 'https://lite.bigbob.asia/v1' : `${window.location.origin}/v1`)
                 : 'https://lite.bigbob.asia/v1';
 
               return (
