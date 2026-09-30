@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, Body, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -46,6 +46,10 @@ from .zcode import (
     forward_zcode_complete,
     ping_zcode_account,
     load_local_zcode_credentials,
+)
+from .oauth_device import (
+    initiate_qoder_device_flow,
+    poll_qoder_device_token,
 )
 
 BASE_DIR = os.path.dirname(__file__)
@@ -428,6 +432,32 @@ async def zcode_import(verify: None = Depends(check_gateway_token)) -> dict[str,
     except Exception as exc:
         add_log(f"Failed to import local ZCode account: {exc}", "ERROR")
         raise HTTPException(status_code=400, detail=f"导入本机 ZCode 凭据失败: {exc}")
+
+
+@app.post("/ui/oauth/qoder/device-code")
+async def oauth_qoder_device_code(payload: dict[str, Any] = Body(default={}), verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """发起 Qoder OAuth 2.0 设备授权流（对齐 9Router 方案）。"""
+    region = str(payload.get("region") or "cn").strip().lower()
+    data = initiate_qoder_device_flow(region=region)
+    add_log(f"Initiated Qoder OAuth device authorization (User Code: {data['user_code']}, Region: {region})")
+    return data
+
+
+@app.post("/ui/oauth/qoder/poll")
+async def oauth_qoder_poll(payload: dict[str, Any], verify: None = Depends(check_gateway_token)) -> dict[str, Any]:
+    """轮询 Qoder 设备授权 Token，成功后自动入库（对齐 9Router 方案）。"""
+    nonce = str(payload.get("nonce") or payload.get("device_code") or "").strip()
+    verifier = str(payload.get("verifier") or payload.get("code_verifier") or "").strip()
+    machine_id = str(payload.get("machine_id") or "").strip()
+    region = str(payload.get("region") or "cn").strip().lower()
+
+    if not nonce or not verifier:
+        raise HTTPException(status_code=400, detail="Missing nonce or verifier")
+
+    res = await poll_qoder_device_token(nonce=nonce, verifier=verifier, machine_id=machine_id, region=region)
+    if res.get("status") == "ok":
+        add_log(f"Qoder OAuth device login succeeded! Account: {res['account']['name']} ({res['account']['uid']})")
+    return res
 
 
 @app.post("/ui/accounts/add-provider")

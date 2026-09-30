@@ -1,4 +1,4 @@
-import{i as e,n as t,r as n,s as r,t as i}from"./jsx-runtime-D6-csdPx.js";import{i as a,n as o,r as s,t as c}from"./lib-BksgbNJT.js";var l=`# Account Pool & Autonomous Maintenance
+import{i as e,n as t,r as n,s as r,t as i}from"./jsx-runtime-D9oA6FbU.js";import{i as a,n as o,r as s,t as c}from"./lib-CXU20by_.js";var l=`# Account Pool & Autonomous Maintenance
 
 GITIT unifies multiple upstream provider accounts (domestic Qoder, Zhipu ZCode, and custom OpenAI-compatible endpoints) into a single resilient routing pool with automatic failover.
 
@@ -35,8 +35,8 @@ GITIT 账号池支持将多个上游厂商（国内版 Qoder、智谱 ZCode 及�
 
 | 厂商 | 凭证类型 | 导入方式 |
 | :--- | :--- | :--- |
-| **Qoder** | Personal Access Token (\`pt-...\`) / OAuth 会话 | 控制台粘贴 PAT，或本地运行点击 Auto Import 提取 |
-| **ZCode** | 智谱 API Key (\`sk-...\` / ID.Secret) | 控制台输入密钥，或本地读取 \`%LOCALAPPDATA%\\ZCode\` |
+| **Qoder** | RFC 8628 OAuth 免密会话 / PAT 令牌 (\`pt-...\`) | 控制台一键弹窗扫码/网页授权（对齐 9Router 方案），或粘贴 PAT 令牌 |
+| **ZCode** | 智谱 BigModel API Key (\`sk-...\` / ID.Secret) | 控制台输入密钥，自动解构读取本地 \`%LOCALAPPDATA%\\ZCode\\v2\\config.json\` |
 | **Custom** | 标准 OpenAI 兼容 API Key + Base URL | 控制台直接录入自定义厂商端点 |
 
 ## 自动去重与凭据更新
@@ -301,10 +301,19 @@ Authorization: Bearer qg_live_42adacf1b759ee4e6e8a7ea99f9eb350
 - **全部账号 (默认轮询)**：可调用全网关所有处于 \`all\` 状态的账号，享用最大并发与可用性。
 - **专属账号绑定**：指定此 Key 仅消耗特定账号的算力（如个人号或特定组织的套餐），实现团队成员间的算力物理隔离。
 
+## 第三层：上游厂商 OAuth 2.0 设备代码鉴权 (RFC 8628 Device Authorization)
+
+为免去用户手动提取和管理 PAT 令牌的繁琐，GITIT 原生支持类似 9Router 的 **OAuth 2.0 设备授权流（Device Flow, RFC 8628）**：
+
+1. **PKCE S256 挑战生成**：前端发起授权请求，后端生成 32 字节高熵 Verifier 与 SHA-256 Challenge，生成 8 位短用户代码（User Code，例如 \`36DC4F40\`）与设备唯一 Nonce。
+2. **免密授权弹窗**：在控制台点击 **Qoder 免密授权**，一键复制授权 URL 或直接打开浏览器进行一键授权。
+3. **后台智能轮询自动入库**：网关后台以 2 秒间隔安全轮询 \`https://openapi.qoder.com.cn/api/v1/deviceToken/poll\`，用户在浏览器确认授权后，网关毫秒级获取 Token、自动查询账号基础信息并写入 SQLite 账号池参与调度。
+
 ## 安全建议
 
 - 永远不要将管理控制台密码直接配置给下游客户端作为 API Key。
 - 云端部署建议保持 API Key 鉴权为开启状态（默认即开启）。
+- Qoder OAuth 设备授权通过 PKCE S256 防护，即使链接暴露也无法被第三方恶意窃取 Token。
 `,_='# Operations & Deployment\n\nOperational procedures, database maintenance, and security guidelines for GITIT.\n\n## Deployment Modes\n\n### 1. Cloud Production Deployment (Server A)\n- **Host**: Linux Server A (`35.212.220.77:22`), Docker mapped to port `5050`.\n- **Public Domain**: `https://lite.bigbob.asia`.\n- **Automated Deployer**: Run `python scripts/deploy_remote.py` for hash-based differential upload and hot-reloading.\n\n### 2. Local Environment\n- **Host**: Windows 11 with `start.bat` or `uv run qoder2api`.\n- Default port: `5050`.\n\n## Database Management\n\nPersistence path:\n```text\n~/.qoder/qoder2api.db\n```\n\nBackup via PowerShell:\n```powershell\nCopy-Item "$env:USERPROFILE\\.qoder\\qoder2api.db" "$env:USERPROFILE\\Desktop\\gitit_db_backup.db"\n```\n\n## Cloud Registrar Safety Policy\n\n- The automated registrar is strictly restricted to local deployment.\n- On Cloud Server A, `ENABLE_REGISTRAR=false` is enforced. Any incoming request to `/ui/registrar/*` is blocked with `403 Forbidden`.\n',v=`# 运维与部署规范
 
 本页记录 GITIT 网关在云端与本地环境下的运维、数据库维护以及关键安全守则。

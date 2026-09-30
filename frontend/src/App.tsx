@@ -497,6 +497,20 @@ export default function App() {
 
   const [showAddAccountModal, setShowAddAccountModal] = useState(false)
   const [addAccountTab, setAddAccountTab] = useState<'pat' | 'zcode' | 'custom' | 'batch' | 'local'>('pat')
+  const [qoderAuthMode, setQoderAuthMode] = useState<'oauth' | 'pat'>('oauth')
+  const [oauthRegion, setOauthRegion] = useState<'cn' | 'global'>('cn')
+  const [oauthData, setOauthData] = useState<{
+    verification_uri: string
+    verification_uri_complete: string
+    user_code: string
+    device_code: string
+    code_verifier: string
+    machine_id: string
+  } | null>(null)
+  const [oauthLoading, setOauthLoading] = useState(false)
+  const [oauthPolling, setOauthPolling] = useState(false)
+  const [oauthError, setOauthError] = useState<string | null>(null)
+  const oauthPollTimerRef = useRef<any>(null)
   const [addAccountPat, setAddAccountPat] = useState('')
   const [addAccountName, setAddAccountName] = useState('')
   const [addingAccount, setAddingAccount] = useState(false)
@@ -843,6 +857,103 @@ export default function App() {
     } finally { setSubmittingPat(false) }
   }
 
+  const stopPollingOAuth = useCallback(() => {
+    if (oauthPollTimerRef.current) {
+      clearTimeout(oauthPollTimerRef.current)
+      oauthPollTimerRef.current = null
+    }
+    setOauthPolling(false)
+  }, [])
+
+  const closeAddAccountModal = useCallback(() => {
+    stopPollingOAuth()
+    setShowAddAccountModal(false)
+  }, [stopPollingOAuth])
+
+  const startQoderOAuthFlow = useCallback(async (region: 'cn' | 'global' = oauthRegion) => {
+    stopPollingOAuth()
+    setOauthLoading(true)
+    setOauthError(null)
+    setOauthData(null)
+    try {
+      const resp = await authedFetch('/ui/oauth/qoder/device-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ region }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}))
+        throw new Error(err.detail || 'Failed to initiate device flow')
+      }
+      const data = await resp.json()
+      setOauthData(data)
+      setOauthLoading(false)
+      setOauthPolling(true)
+
+      let attempts = 0
+      const maxAttempts = 150
+      const pollLoop = async () => {
+        attempts++
+        if (attempts > maxAttempts) {
+          stopPollingOAuth()
+          setOauthError(lang === 'zh' ? '授权超时，请点击下方重新生成' : 'Authorization timed out, please regenerate')
+          return
+        }
+        try {
+          const pResp = await authedFetch('/ui/oauth/qoder/poll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              nonce: data.device_code,
+              verifier: data.code_verifier,
+              machine_id: data.machine_id,
+              region,
+            }),
+          })
+          if (pResp.ok) {
+            const pData = await pResp.json()
+            if (pData.status === 'ok') {
+              stopPollingOAuth()
+              pushToast(
+                'SUCCESS',
+                lang === 'zh' ? 'Qoder 授权成功' : 'Qoder Authorized',
+                lang === 'zh' ? `账号“${pData.account?.name || 'Qoder'}”已成功接入并入库！` : `Account "${pData.account?.name || 'Qoder'}" successfully connected!`
+              )
+              closeAddAccountModal()
+              fetchAccounts()
+              fetchStatus()
+              fetchLogs()
+              fetchCheckinStatus()
+              return
+            }
+          }
+        } catch {
+          // ignore transient poll error and retry
+        }
+        oauthPollTimerRef.current = setTimeout(pollLoop, 2000)
+      }
+      oauthPollTimerRef.current = setTimeout(pollLoop, 2000)
+    } catch (err: any) {
+      setOauthLoading(false)
+      setOauthError(err.message || 'OAuth initiation failed')
+    }
+  }, [oauthRegion, stopPollingOAuth, authedFetch, lang, pushToast, closeAddAccountModal, fetchAccounts, fetchStatus, fetchLogs, fetchCheckinStatus])
+
+  const openAddAccountModal = useCallback((tab: 'pat' | 'zcode' | 'custom' | 'batch' | 'local' = 'pat', mode: 'oauth' | 'pat' = 'oauth') => {
+    setAddAccountTab(tab)
+    setQoderAuthMode(mode)
+    setShowAddAccountModal(true)
+    if (tab === 'pat' && mode === 'oauth') {
+      startQoderOAuthFlow(oauthRegion)
+    }
+  }, [oauthRegion, startQoderOAuthFlow])
+
+  useEffect(() => {
+    return () => {
+      stopPollingOAuth()
+    }
+  }, [stopPollingOAuth])
+
   const handleAddAccountPat = async () => {
     const trimmed = addAccountPat.trim()
     if (!trimmed) return
@@ -861,7 +972,7 @@ export default function App() {
       pushToast('SUCCESS', lang === 'zh' ? '账号已成功添加' : 'Account Added Successfully', msg.patAdded(data.name || 'PAT Account'))
       setAddAccountPat('')
       setAddAccountName('')
-      setShowAddAccountModal(false)
+      closeAddAccountModal()
       fetchAccounts()
       fetchStatus()
       fetchLogs()
@@ -883,7 +994,7 @@ export default function App() {
       }
       const data = await resp.json()
       pushToast('SUCCESS', lang === 'zh' ? 'ZCode 凭据已导入' : 'ZCode Imported', `成功导入账号: ${data.account?.name || 'ZCode'}`)
-      setShowAddAccountModal(false)
+      closeAddAccountModal()
       fetchAccounts()
       fetchStatus()
       fetchLogs()
@@ -952,7 +1063,7 @@ export default function App() {
       pushToast('SUCCESS', lang === 'zh' ? 'ZCode 账号已添加' : 'ZCode Account Added', `账号: ${data.account?.name}`)
       setZcodeApiKey('')
       setZcodeAccountName('')
-      setShowAddAccountModal(false)
+      closeAddAccountModal()
       fetchAccounts()
       fetchStatus()
       fetchLogs()
@@ -989,7 +1100,7 @@ export default function App() {
       setCustomApiKey('')
       setCustomBaseUrl('')
       setCustomAccountName('')
-      setShowAddAccountModal(false)
+      closeAddAccountModal()
       fetchAccounts()
       fetchStatus()
       fetchLogs()
@@ -1429,7 +1540,7 @@ export default function App() {
             </div>
 
             <button
-              onClick={() => { setAddAccountTab('pat'); setShowAddAccountModal(true) }}
+              onClick={() => openAddAccountModal('pat', 'oauth')}
               className="px-3 py-1.5 bg-ink hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all shrink-0 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[15px]">add</span>
@@ -1568,7 +1679,14 @@ export default function App() {
                   <button onClick={handleRefreshStatus} className="flex items-center gap-2 px-4 py-2.5 text-body hover:text-ink transition-colors font-bold text-sm">
                     <span className="material-symbols-outlined text-[18px]">refresh</span>{t.accounts.refreshStatus}
                   </button>
-                  <button onClick={() => setShowAddAccountModal(true)} className="flex items-center gap-2 px-6 py-2.5 bg-ink text-white rounded-lg hover:bg-neutral-800 transition-all font-bold text-sm shadow-md">
+                  <button
+                    onClick={() => openAddAccountModal('pat', 'oauth')}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg hover:brightness-110 transition-all font-bold text-sm shadow-md cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">lock_open</span>
+                    {lang === 'zh' ? 'Qoder 免密授权' : 'Qoder OAuth'}
+                  </button>
+                  <button onClick={() => openAddAccountModal('pat', 'oauth')} className="flex items-center gap-2 px-6 py-2.5 bg-ink text-white rounded-lg hover:bg-neutral-800 transition-all font-bold text-sm shadow-md cursor-pointer">
                     <span className="material-symbols-outlined text-[18px]">add</span>{lang === 'zh' ? '添加账号' : 'Add Account'}
                   </button>
                 </div>
@@ -2829,7 +2947,10 @@ export default function App() {
 
       {/* ─── ADD ACCOUNT MODAL ─── */}
       {showAddAccountModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) closeAddAccountModal() }}
+        >
           <div className="bg-surface-card border border-hairline rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-hairline">
@@ -2838,8 +2959,9 @@ export default function App() {
                 <h3 className="font-bold text-base text-ink">{lang === 'zh' ? '接入模型厂商与账号' : 'Add Model Provider & Account'}</h3>
               </div>
               <button
-                onClick={() => setShowAddAccountModal(false)}
-                className="text-body hover:text-ink transition-colors p-1 rounded-lg hover:bg-black/5"
+                type="button"
+                onClick={closeAddAccountModal}
+                className="text-body hover:text-ink transition-colors p-1 rounded-lg hover:bg-black/5 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
@@ -2848,89 +2970,273 @@ export default function App() {
             {/* Modal Tabs */}
             <div className="flex border-b border-hairline px-6 pt-3 gap-5 text-sm font-semibold overflow-x-auto">
               <button
-                onClick={() => setAddAccountTab('pat')}
-                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'pat' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+                type="button"
+                onClick={() => {
+                  setAddAccountTab('pat')
+                  if (qoderAuthMode === 'oauth' && !oauthData && !oauthLoading) {
+                    startQoderOAuthFlow(oauthRegion)
+                  }
+                }}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'pat' ? 'border-[#E05D38] text-[#E05D38] font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
-                Qoder (PAT)
+                Qoder (OAuth / PAT)
               </button>
               <button
-                onClick={() => setAddAccountTab('zcode')}
-                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'zcode' ? 'border-emerald-600 text-emerald-700 font-bold' : 'border-transparent text-body hover:text-ink'}`}
+                type="button"
+                onClick={() => { stopPollingOAuth(); setAddAccountTab('zcode') }}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'zcode' ? 'border-emerald-600 text-emerald-700 font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
                 ZCode (智谱)
               </button>
               <button
-                onClick={() => setAddAccountTab('custom')}
-                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'custom' ? 'border-purple-600 text-purple-700 font-bold' : 'border-transparent text-body hover:text-ink'}`}
+                type="button"
+                onClick={() => { stopPollingOAuth(); setAddAccountTab('custom') }}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'custom' ? 'border-purple-600 text-purple-700 font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
                 {lang === 'zh' ? '自定义厂商' : 'Custom Provider'}
               </button>
               <button
-                onClick={() => setAddAccountTab('batch')}
-                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'batch' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+                type="button"
+                onClick={() => { stopPollingOAuth(); setAddAccountTab('batch') }}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'batch' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
                 {lang === 'zh' ? '批量导入' : 'Batch JSON'}
               </button>
               <button
-                onClick={() => setAddAccountTab('local')}
-                className={`pb-3 transition-colors border-b-2 whitespace-nowrap ${addAccountTab === 'local' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
+                type="button"
+                onClick={() => { stopPollingOAuth(); setAddAccountTab('local') }}
+                className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'local' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
                 {lang === 'zh' ? 'Qoder 本机' : 'Qoder Local'}
               </button>
             </div>
 
-            {/* Tab 1: Qoder PAT */}
+            {/* Tab 1: Qoder */}
             {addAccountTab === 'pat' && (
               <div className="p-6 space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                    {lang === 'zh' ? 'Qoder Personal Access Token (PAT) *' : 'Qoder PAT Token *'}
-                  </label>
-                  <input
-                    type="password"
-                    value={addAccountPat}
-                    onChange={e => setAddAccountPat(e.target.value)}
-                    placeholder="pat_..."
-                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
-                  />
+                {/* Mode Selector */}
+                <div className="flex items-center justify-between pb-3 border-b border-hairline">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-body">
+                    <span className="material-symbols-outlined text-[16px]">tune</span>
+                    <span>{lang === 'zh' ? '授权模式' : 'Auth Mode'}</span>
+                  </div>
+                  <div className="inline-flex p-1 bg-surface-ground border border-hairline rounded-xl gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQoderAuthMode('oauth')
+                        if (!oauthData && !oauthLoading) {
+                          startQoderOAuthFlow(oauthRegion)
+                        }
+                      }}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                        qoderAuthMode === 'oauth'
+                          ? 'bg-[#E05D38] text-white shadow-xs'
+                          : 'text-body hover:text-ink'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">lock</span>
+                      <span>OAuth (免密推荐)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stopPollingOAuth()
+                        setQoderAuthMode('pat')
+                      }}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                        qoderAuthMode === 'pat'
+                          ? 'bg-ink text-white shadow-xs'
+                          : 'text-body hover:text-ink'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">key</span>
+                      <span>PAT 令牌</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                    {lang === 'zh' ? '账号备注名称 (可选)' : 'Account Alias / Note (Optional)'}
-                  </label>
-                  <input
-                    type="text"
-                    value={addAccountName}
-                    onChange={e => setAddAccountName(e.target.value)}
-                    placeholder={lang === 'zh' ? '例如：开发主账号 / VIP 1' : 'e.g. Main Account'}
-                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink outline-none focus:border-ink/40 transition-colors"
-                  />
-                </div>
+                {qoderAuthMode === 'oauth' ? (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    {/* Top macOS Controls & Region */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block"></span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
+                      </div>
+                      <div className="font-bold text-sm text-ink flex items-center gap-2">
+                        <span>Connect Qoder {oauthRegion.toUpperCase()}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono font-bold">RFC 8628</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = oauthRegion === 'cn' ? 'global' : 'cn'
+                            setOauthRegion(next)
+                            startQoderOAuthFlow(next)
+                          }}
+                          className="text-[11px] px-2 py-0.5 rounded border border-hairline text-body hover:text-ink transition-colors cursor-pointer"
+                          title="切换国内版/国际版"
+                        >
+                          {oauthRegion === 'cn' ? '🇨🇳 国内版' : '🌐 国际版'}
+                        </button>
+                      </div>
+                    </div>
 
-                <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/60 text-xs text-blue-900 leading-relaxed">
-                  <p className="font-semibold mb-1">💡 如何获取 PAT 令牌：</p>
-                  <p>登录 Qoder 官网个人中心 (Settings -&gt; Personal Access Tokens) 创建一个 PAT，复制粘贴到上方即可自动验证并接入账号池参与轮询与并发请求。</p>
-                </div>
+                    <p className="text-center text-xs text-body">
+                      {lang === 'zh' ? '访问下面的登录 URL 并进行授权:' : 'Visit the login URL below to authorize:'}
+                    </p>
 
-                <div className="pt-2 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddAccountModal(false)}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
-                  >
-                    {lang === 'zh' ? '取消' : 'Cancel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddAccountPat}
-                    disabled={!addAccountPat.trim() || addingAccount}
-                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2"
-                  >
-                    {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
-                    {addingAccount ? (lang === 'zh' ? '验证入库中...' : 'Verifying...') : (lang === 'zh' ? '验证并添加' : 'Verify & Add')}
-                  </button>
-                </div>
+                    {oauthLoading ? (
+                      <div className="py-10 flex flex-col items-center justify-center gap-3">
+                        <span className="material-symbols-outlined text-[32px] text-[#E05D38] animate-spin">progress_activity</span>
+                        <p className="text-xs text-body">{lang === 'zh' ? '正在向 Qoder 发起设备授权...' : 'Requesting authorization code from Qoder...'}</p>
+                      </div>
+                    ) : oauthError ? (
+                      <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 text-center space-y-3">
+                        <p>{oauthError}</p>
+                        <button
+                          type="button"
+                          onClick={() => startQoderOAuthFlow(oauthRegion)}
+                          className="px-4 py-1.5 bg-red-600 text-white rounded-lg font-bold text-xs hover:bg-red-700 cursor-pointer"
+                        >
+                          {lang === 'zh' ? '重试' : 'Retry'}
+                        </button>
+                      </div>
+                    ) : oauthData ? (
+                      <div className="space-y-3.5">
+                        {/* 登录 URL Card */}
+                        <div className="rounded-xl p-4 bg-[#FBF9F5] border border-amber-200/60 text-center shadow-xs">
+                          <div className="text-[11px] font-semibold text-body/80 mb-2">登录 URL</div>
+                          <div className="font-mono text-[11px] text-body break-all leading-relaxed bg-white p-3 rounded-lg border border-hairline/80 select-all text-left shadow-2xs max-h-24 overflow-y-auto">
+                            {oauthData.verification_uri_complete}
+                          </div>
+                          <div className="flex items-center justify-center gap-3 mt-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(oauthData.verification_uri_complete)
+                                pushToast('SUCCESS', lang === 'zh' ? '已复制登录 URL' : 'Copied URL', lang === 'zh' ? '授权链接已成功复制到剪贴板' : 'URL copied')
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg border border-hairline bg-white hover:bg-neutral-50 text-xs font-semibold text-ink flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">content_copy</span>
+                              {lang === 'zh' ? '复制' : 'Copy'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => window.open(oauthData.verification_uri_complete, '_blank')}
+                              className="px-3.5 py-1.5 rounded-lg border border-hairline bg-white hover:bg-neutral-50 text-xs font-semibold text-ink flex items-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+                              {lang === 'zh' ? '打开' : 'Open'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 你的代码 Card */}
+                        <div className="rounded-xl p-4 bg-[#FFF7F2] border border-orange-200 text-center shadow-xs">
+                          <div className="text-[11px] font-semibold text-orange-950/70 mb-1.5">你的代码</div>
+                          <div className="flex items-center justify-center gap-3">
+                            <span className="font-mono font-black text-3xl tracking-widest text-[#E05D38] select-all">
+                              {oauthData.user_code}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(oauthData.user_code)
+                                pushToast('SUCCESS', lang === 'zh' ? '已复制代码' : 'Copied Code', oauthData.user_code)
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-orange-100 text-[#E05D38] transition-colors cursor-pointer"
+                              title={lang === 'zh' ? '复制代码' : 'Copy Code'}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">content_copy</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 等待授权 Spinner */}
+                        <div className="flex flex-col items-center justify-center gap-1.5 pt-1">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-body">
+                            <span className="material-symbols-outlined text-[18px] animate-spin text-[#E05D38]">progress_activity</span>
+                            <span>{lang === 'zh' ? '等待授权...' : 'Waiting for authorization...'}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => startQoderOAuthFlow(oauthRegion)}
+                            className="text-[11px] text-body hover:text-ink underline transition-colors cursor-pointer"
+                          >
+                            {lang === 'zh' ? '重新生成授权码' : 'Regenerate Code'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={closeAddAccountModal}
+                        className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
+                      >
+                        {lang === 'zh' ? '关闭' : 'Close'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4 animate-in fade-in duration-150">
+                    <div>
+                      <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                        {lang === 'zh' ? 'Qoder Personal Access Token (PAT) *' : 'Qoder PAT Token *'}
+                      </label>
+                      <input
+                        type="password"
+                        value={addAccountPat}
+                        onChange={e => setAddAccountPat(e.target.value)}
+                        placeholder="pat_..."
+                        className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                        {lang === 'zh' ? '账号备注名称 (可选)' : 'Account Alias / Note (Optional)'}
+                      </label>
+                      <input
+                        type="text"
+                        value={addAccountName}
+                        onChange={e => setAddAccountName(e.target.value)}
+                        placeholder={lang === 'zh' ? '例如：开发主账号 / VIP 1' : 'e.g. Main Account'}
+                        className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                      />
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/60 text-xs text-blue-900 leading-relaxed">
+                      <p className="font-semibold mb-1">💡 如何获取 PAT 令牌：</p>
+                      <p>登录 Qoder 官网个人中心 (Settings -&gt; Personal Access Tokens) 创建一个 PAT，复制粘贴到上方即可自动验证并接入账号池参与轮询与并发请求。</p>
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={closeAddAccountModal}
+                        className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
+                      >
+                        {lang === 'zh' ? '取消' : 'Cancel'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddAccountPat}
+                        disabled={!addAccountPat.trim() || addingAccount}
+                        className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2 cursor-pointer"
+                      >
+                        {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
+                        {addingAccount ? (lang === 'zh' ? '验证入库中...' : 'Verifying...') : (lang === 'zh' ? '验证并添加' : 'Verify & Add')}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -3021,8 +3327,8 @@ export default function App() {
                 <div className="pt-2 flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setShowAddAccountModal(false)}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                    onClick={closeAddAccountModal}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
                   >
                     {lang === 'zh' ? '取消' : 'Cancel'}
                   </button>
@@ -3098,8 +3404,8 @@ export default function App() {
                 <div className="pt-2 flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setShowAddAccountModal(false)}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                    onClick={closeAddAccountModal}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
                   >
                     {lang === 'zh' ? '取消' : 'Cancel'}
                   </button>
@@ -3139,8 +3445,8 @@ export default function App() {
                 <div className="pt-2 flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setShowAddAccountModal(false)}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                    onClick={closeAddAccountModal}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
                   >
                     {lang === 'zh' ? '取消' : 'Cancel'}
                   </button>
@@ -3148,7 +3454,7 @@ export default function App() {
                     type="button"
                     onClick={doBatchImport}
                     disabled={!batchJson.trim()}
-                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm"
+                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm cursor-pointer"
                   >
                     {lang === 'zh' ? '立即导入' : 'Import Now'}
                   </button>
@@ -3179,8 +3485,8 @@ export default function App() {
                 <div className="pt-2 flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => setShowAddAccountModal(false)}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors"
+                    onClick={closeAddAccountModal}
+                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
                   >
                     {lang === 'zh' ? '取消' : 'Cancel'}
                   </button>
@@ -3188,10 +3494,10 @@ export default function App() {
                     type="button"
                     onClick={async () => {
                       await handleImportAuth()
-                      setShowAddAccountModal(false)
+                      closeAddAccountModal()
                     }}
                     disabled={loading}
-                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2"
+                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2 cursor-pointer"
                   >
                     {loading && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
                     {lang === 'zh' ? '尝试从本机导入' : 'Attempt Local Import'}

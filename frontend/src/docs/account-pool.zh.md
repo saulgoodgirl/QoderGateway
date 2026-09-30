@@ -6,8 +6,8 @@ GITIT 账号池支持将多个上游厂商（国内版 Qoder、智谱 ZCode 及�
 
 | 厂商 | 凭证类型 | 导入方式 |
 | :--- | :--- | :--- |
-| **Qoder** | Personal Access Token (`pt-...`) / OAuth 会话 | 控制台粘贴 PAT，或本地运行点击 Auto Import 提取 |
-| **ZCode** | 智谱 API Key (`sk-...` / ID.Secret) | 控制台输入密钥，或本地读取 `%LOCALAPPDATA%\ZCode` |
+| **Qoder** | RFC 8628 OAuth 免密会话 / PAT 令牌 (`pt-...`) | 控制台一键弹窗扫码/网页授权（对齐 9Router 方案），或粘贴 PAT 令牌 |
+| **ZCode** | 智谱 BigModel API Key (`sk-...` / ID.Secret) | 控制台输入密钥，自动解构读取本地 `%LOCALAPPDATA%\ZCode\v2\config.json` |
 | **Custom** | 标准 OpenAI 兼容 API Key + Base URL | 控制台直接录入自定义厂商端点 |
 
 ## 自动去重与凭据更新
