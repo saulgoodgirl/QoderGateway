@@ -507,7 +507,7 @@ export default function App() {
 
   const [showAddAccountModal, setShowAddAccountModal] = useState(false)
   const [addAccountTab, setAddAccountTab] = useState<'pat' | 'zcode'>('pat')
-  const [qoderAuthMode, setQoderAuthMode] = useState<'oauth' | 'pat'>('oauth')
+  const [qoderAuthMode, setQoderAuthMode] = useState<'oauth' | 'pat'>('pat')
   const [zcodeAuthMode, setZcodeAuthMode] = useState<'pat' | 'local' | 'oauth'>('pat')
   const [oauthRegion, setOauthRegion] = useState<'cn' | 'global'>('cn')
   const [oauthData, setOauthData] = useState<{
@@ -1097,7 +1097,7 @@ export default function App() {
     }
   }, [stopPollingZcodeOAuth, authedFetch, lang, pushToast, closeAddAccountModal, fetchAccounts, fetchStatus, fetchLogs, fetchCheckinStatus])
 
-  const openAddAccountModal = useCallback((tab: 'pat' | 'zcode' = 'pat', mode: 'oauth' | 'pat' = 'oauth') => {
+  const openAddAccountModal = useCallback((tab: 'pat' | 'zcode' = 'pat', mode: 'oauth' | 'pat' = 'pat') => {
     setAddAccountTab(tab)
     setQoderAuthMode(mode)
     setShowAddAccountModal(true)
@@ -1704,7 +1704,7 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2.5 shrink-0">
             <button
-              onClick={() => openAddAccountModal('pat', 'oauth')}
+              onClick={() => openAddAccountModal('pat', 'pat')}
               className="px-3 py-1.5 bg-ink hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all shrink-0 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[15px]">add</span>
@@ -3574,6 +3574,21 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => {
+                        stopPollingOAuth()
+                        setQoderAuthMode('pat')
+                      }}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                        qoderAuthMode === 'pat'
+                          ? 'bg-ink text-white shadow-xs'
+                          : 'text-body hover:text-ink'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">key</span>
+                      <span>PAT 令牌</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
                         setQoderAuthMode('oauth')
                         if (!oauthData && !oauthLoading) {
                           startQoderOAuthFlow(oauthRegion)
@@ -3587,21 +3602,6 @@ export default function App() {
                     >
                       <span className="material-symbols-outlined text-[15px]">lock</span>
                       <span>OAuth (免密推荐)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        stopPollingOAuth()
-                        setQoderAuthMode('pat')
-                      }}
-                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
-                        qoderAuthMode === 'pat'
-                          ? 'bg-ink text-white shadow-xs'
-                          : 'text-body hover:text-ink'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[15px]">key</span>
-                      <span>PAT 令牌</span>
                     </button>
                   </div>
                 </div>
