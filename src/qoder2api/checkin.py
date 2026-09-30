@@ -263,6 +263,22 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
     provider = row["provider"] if "provider" in row.keys() else "qoder"
     if provider and provider != "qoder":
         current_cycle = get_current_checkin_cycle()
+        prev_cycle = row["last_checkin_cycle"] if "last_checkin_cycle" in row.keys() else None
+        if prev_cycle == current_cycle and not force:
+            return {
+                "ok": True,
+                "claimed": False,
+                "already_claimed": True,
+                "waiting_refresh": False,
+                "is_enterprise": False,
+                "credits": 0,
+                "tokens": 200000000 if provider.lower() == "zcode" else 0,
+                "uid": uid,
+                "name": row["name"],
+                "provider": provider,
+                "message": f"【{provider.upper()}】今日已全额申领当日特权，无需重复领取",
+            }
+
         with get_db() as conn:
             conn.execute(
                 "UPDATE accounts SET last_checkin_cycle = ?, checkin_streak = COALESCE(checkin_streak, 0) + 1 WHERE uid = ?",
@@ -276,10 +292,11 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
             "waiting_refresh": False,
             "is_enterprise": False,
             "credits": 0,
+            "tokens": 200000000 if provider.lower() == "zcode" else 0,
             "uid": uid,
             "name": row["name"],
             "provider": provider,
-            "message": f"【{provider.upper()}】每日通道保活与配额维保已就绪",
+            "message": f"【{provider.upper()}】每日 2 亿 Tokens 特权通道保活与配额维保已就绪",
         }
 
     if is_enterprise_account(row):
@@ -536,7 +553,7 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             streak = r["checkin_streak"] if "checkin_streak" in r.keys() else 1
             total_days = r["total_claim_days"] if "total_claim_days" in r.keys() else 1
             is_zcode = (provider.lower() == "zcode")
-            desc = "智谱官方 1 亿 Token 当日特权（每日 00:00 自动刷新）" if is_zcode else f"{provider.upper()} 官方上游直通通道"
+            desc = "智谱官方 2 亿 Token 当日特权（每日 00:00 自动刷新）" if is_zcode else f"{provider.upper()} 官方上游直通通道"
             return {
                 "uid": uid,
                 "name": name,
@@ -545,18 +562,18 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
                 "provider": provider,
                 "claimed_today": is_done or is_zcode,
                 "status_code": "claimed",
-                "status_text": "已申领 1 亿 Tokens" if is_zcode else "已在库生效",
+                "status_text": "已申领 2 亿 Tokens" if is_zcode else "已在库生效",
                 "streak_days": streak or 1,
                 "total_claim_days": total_days or 1,
                 "reward_credits": 0,
-                "reward_tokens": 100000000 if is_zcode else 0,
+                "reward_tokens": 200000000 if is_zcode else 0,
                 "unit": "Tokens" if is_zcode else "Credits",
                 "rem_credits": 0.0,
                 "quota_info": {
-                    "remaining": 100000000 if is_zcode else 0,
-                    "total": 100000000 if is_zcode else 0,
+                    "remaining": 200000000 if is_zcode else 0,
+                    "total": 200000000 if is_zcode else 0,
                     "used": 0,
-                    "plan_remaining": 100000000 if is_zcode else 0,
+                    "plan_remaining": 200000000 if is_zcode else 0,
                     "addon_remaining": 0,
                     "unit": "Tokens" if is_zcode else "Credits",
                     "desc": desc,
@@ -699,8 +716,8 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
         a.pop("rem_credits", None)
 
     zcode_claimed_count = sum(1 for a in zcode_accounts if a["status_code"] == "claimed")
-    zcode_total_tokens_today = zcode_claimed_count * 100_000_000
-    zcode_remaining_tokens = 100_000_000 * len(zcode_accounts)
+    zcode_total_tokens_today = zcode_claimed_count * 200_000_000
+    zcode_remaining_tokens = 200_000_000 * len(zcode_accounts)
 
     enterprise_remaining_credits = sum(_safe_float(r["quota"]) for r in enterprise_rows)
     pool_total_remaining_credits = round(personal_remaining_credits + enterprise_remaining_credits, 1)
@@ -732,7 +749,7 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
         "last_auto_date": _last_auto_checkin_cycle,
         "cycle_id": current_cycle,
         "next_refresh_seconds": next_refresh_seconds,
-        "refresh_rule": "每日 10:00 (UTC+8) 刷新 Qoder +100 Credits；每日 00:00 (UTC+8) 申领 ZCode 1 亿 Tokens",
+        "refresh_rule": "每日 10:00 (UTC+8) 刷新 Qoder +100 Credits；每日 00:00 (UTC+8) 申领 ZCode 2 亿 Tokens",
     }
 
     with _checkin_cache_lock:

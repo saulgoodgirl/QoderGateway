@@ -2105,6 +2105,7 @@ export default function App() {
             const zcodeAccounts = (checkinData?.accounts || []).filter(a => a.provider === 'zcode')
             const qoderClaimedCount = qoderAccounts.filter(a => a.status_code === 'claimed').length
             const zcodeClaimedCount = zcodeAccounts.filter(a => a.status_code === 'claimed' || a.claimed_today).length
+            const allZCodeClaimed = zcodeAccounts.length > 0 && zcodeAccounts.every(a => a.status_code === 'claimed' || a.claimed_today)
 
             return (
               <div className="space-y-6">
@@ -2138,7 +2139,7 @@ export default function App() {
                         }`}
                       >
                         <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                        <span>{lang === 'zh' ? '智谱 ZCode 每日特权 (1 亿 Tokens)' : 'ZCode Daily (100M Tokens)'}</span>
+                        <span>{lang === 'zh' ? '智谱 ZCode 每日特权 (2 亿 Tokens)' : 'ZCode Daily (200M Tokens)'}</span>
                         <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold">
                           {zcodeAccounts.length}
                         </span>
@@ -2440,15 +2441,15 @@ export default function App() {
                       <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <span className="px-2.5 py-1 rounded-full bg-emerald-500/30 border border-emerald-400/30 text-xs font-bold text-emerald-200 flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>{lang === 'zh' ? '智谱 ZCode 官方每日特权' : 'ZCode Daily 100M Tokens'}
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>{lang === 'zh' ? '智谱 ZCode 官方每日特权' : 'ZCode Daily 200M Tokens'}
                           </span>
                           <span className="text-xs font-mono font-bold text-emerald-300">00:00:05 (UTC+8) {lang === 'zh' ? '自动刷新' : 'Reset'}</span>
                         </div>
-                        <h3 className="text-2xl font-black text-white">{lang === 'zh' ? 'ZCode 每日 1 亿 Token 领券活动' : 'ZCode Daily 100M Token Campaign'}</h3>
+                        <h3 className="text-2xl font-black text-white">{lang === 'zh' ? 'ZCode 每日 2 亿 Token 领券活动' : 'ZCode Daily 200M Token Campaign'}</h3>
                         <p className="text-xs text-emerald-200 leading-relaxed max-w-xl">
                           {lang === 'zh'
-                            ? '针对智谱 ZCode 开放平台账号，每日自动申领 100,000,000 Tokens (1 亿) 免费算力包。支持下游 Cursor、Codex++、Cherry Studio 全速高并发调度！'
-                            : 'Claims 100,000,000 free tokens daily via Zhipu ZCode API directly into your pool.'}
+                            ? '针对智谱 ZCode 开放平台账号，每日自动申领 200,000,000 Tokens (2 亿) 免费算力包。支持下游 Cursor、Codex++、Cherry Studio 全速高并发调度！'
+                            : 'Claims 200,000,000 free tokens daily via Zhipu ZCode API directly into your pool.'}
                         </p>
                       </div>
 
@@ -2456,19 +2457,29 @@ export default function App() {
                         <div>
                           <span className="text-[11px] text-emerald-300 block font-medium">{lang === 'zh' ? '今日 ZCode 状态' : 'Today ZCode Status'}</span>
                           <div className="text-lg font-bold text-emerald-300 flex items-center gap-1.5 mt-0.5">
-                            <span className="font-black text-2xl font-mono">100,000,000</span> Tokens {lang === 'zh' ? '满额在库' : 'Active'}
+                            <span className="font-black text-2xl font-mono">200,000,000</span> Tokens {lang === 'zh' ? '满额在库' : 'Active'}
                           </div>
                         </div>
                         <button
                           type="button"
+                          disabled={allZCodeClaimed || claimingUid != null}
                           onClick={() => {
                             if (zcodeAccounts[0]) doClaimOneCheckin(zcodeAccounts[0].uid);
-                            pushToast('SUCCESS', lang === 'zh' ? 'ZCode 领券成功' : 'Claimed Successfully', lang === 'zh' ? '已向智谱开放平台成功申领 100,000,000 Tokens 当日特权！' : '100,000,000 Tokens active');
                           }}
-                          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition-all flex items-center gap-2 shadow-md shadow-emerald-950/50 cursor-pointer"
+                          className={`px-5 py-2.5 font-black rounded-xl text-xs transition-all flex items-center gap-2 shadow-md ${
+                            allZCodeClaimed
+                              ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 cursor-not-allowed opacity-80'
+                              : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-950/50 cursor-pointer'
+                          }`}
                         >
-                          <span className="material-symbols-outlined text-[16px] text-slate-950" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
-                          <span>{lang === 'zh' ? '一键领 1 亿 Tokens' : 'Claim 100M Tokens'}</span>
+                          <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                            {allZCodeClaimed ? 'task_alt' : 'bolt'}
+                          </span>
+                          <span>
+                            {allZCodeClaimed
+                              ? (lang === 'zh' ? '今日已领 2 亿 Tokens (已满额)' : '200M Tokens Active')
+                              : (lang === 'zh' ? '一键领 2 亿 Tokens' : 'Claim 200M Tokens')}
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -2509,11 +2520,11 @@ export default function App() {
                           <span className="material-symbols-outlined text-base text-emerald-500" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
                         </div>
                         <div className="text-2xl font-bold text-emerald-700">
-                          +100,000,000
+                          +200,000,000
                           <span className="text-xs font-semibold text-body ml-1 uppercase">Tokens</span>
                         </div>
                         <div className="text-xs text-body mt-2">
-                          {lang === 'zh' ? '智谱官方 1 亿 Token 当天免费' : '100M free tokens daily'}
+                          {lang === 'zh' ? '智谱官方 2 亿 Token 当天免费' : '200M free tokens daily'}
                         </div>
                       </div>
 
@@ -2523,7 +2534,7 @@ export default function App() {
                           <span className="material-symbols-outlined text-base text-emerald-600">token</span>
                         </div>
                         <div className="text-2xl font-bold text-ink">
-                          100,000,000
+                          200,000,000
                           <span className="text-xs font-semibold text-body ml-1 uppercase">Tokens</span>
                         </div>
                         <div className="text-xs text-body mt-2">
@@ -2598,7 +2609,7 @@ export default function App() {
                                   <td className="px-6 py-4">
                                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                       <span className="material-symbols-outlined text-[15px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-                                      {lang === 'zh' ? '已申领 1 亿 Tokens' : '100M Tokens Active'}
+                                      {lang === 'zh' ? '已申领 2 亿 Tokens' : '200M Tokens Active'}
                                     </span>
                                   </td>
                                   <td className="px-6 py-4 font-mono text-sm text-ink">
@@ -2607,27 +2618,31 @@ export default function App() {
                                   <td className="px-6 py-4">
                                     <div className="space-y-1">
                                       <div className="font-mono text-xs font-bold text-emerald-950">
-                                        100,000,000 <span className="text-[10px] text-body font-normal">/ 100,000,000 Tokens (1 亿)</span>
+                                        200,000,000 <span className="text-[10px] text-body font-normal">/ 200,000,000 Tokens (2 亿)</span>
                                       </div>
                                       <div className="w-32 bg-emerald-100 h-1.5 rounded-full overflow-hidden">
                                         <div className="bg-emerald-500 h-full rounded-full w-full" />
                                       </div>
                                       <div className="text-[11px] text-emerald-800/80 leading-snug pt-0.5">
-                                        智谱官方 1 亿 Token 当日特权（每日 00:00 自动刷新）
+                                        智谱官方 2 亿 Token 当日特权（每日 00:00 自动刷新）
                                       </div>
                                     </div>
                                   </td>
                                   <td className="px-6 py-4 text-right">
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        doClaimOneCheckin(acc.uid)
-                                        pushToast('SUCCESS', '智谱申领成功', '100,000,000 Tokens 当日特权已打入账号池！')
-                                      }}
-                                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer inline-flex items-center gap-1"
+                                      disabled={acc.claimed_today || claimingUid === acc.uid}
+                                      onClick={() => doClaimOneCheckin(acc.uid)}
+                                      className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs inline-flex items-center gap-1 ${
+                                        acc.claimed_today
+                                          ? 'bg-emerald-100/80 text-emerald-800 border border-emerald-300/70 cursor-not-allowed opacity-80'
+                                          : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                                      }`}
                                     >
-                                      <span className="material-symbols-outlined text-[14px]">bolt</span>
-                                      <span>{lang === 'zh' ? '一键领券' : 'Claim Tokens'}</span>
+                                      <span className="material-symbols-outlined text-[14px]">
+                                        {acc.claimed_today ? 'task_alt' : 'bolt'}
+                                      </span>
+                                      <span>{acc.claimed_today ? (lang === 'zh' ? '今日已领 (2 亿)' : 'Claimed') : (lang === 'zh' ? '一键领券' : 'Claim Tokens')}</span>
                                     </button>
                                   </td>
                                 </tr>
@@ -2681,22 +2696,26 @@ export default function App() {
                             </span>
                             <span className="text-xs font-mono font-bold text-emerald-300">00:00:05 (UTC+8)</span>
                           </div>
-                          <h3 className="text-xl font-black text-white">每日 1 亿 Token 领券活动</h3>
+                          <h3 className="text-xl font-black text-white">每日 2 亿 Token 领券活动</h3>
                           <p className="text-xs text-emerald-200 leading-relaxed">
-                            自动申领 100,000,000 Tokens 当日免费特权包。
+                            自动申领 200,000,000 Tokens 当日免费特权包。
                           </p>
                         </div>
                         <div className="pt-6 mt-6 border-t border-emerald-800/80 flex items-center justify-between">
-                          <span className="text-emerald-300 font-bold text-sm">100,000,000 Tokens 在库</span>
+                          <span className="text-emerald-300 font-bold text-sm">200,000,000 Tokens 在库</span>
                           <button
                             type="button"
+                            disabled={allZCodeClaimed || claimingUid != null}
                             onClick={() => {
                               if (zcodeAccounts[0]) doClaimOneCheckin(zcodeAccounts[0].uid)
-                              pushToast('SUCCESS', '申领成功', '1 亿 Tokens 已打入账号池！')
                             }}
-                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                            className={`px-4 py-2 font-bold rounded-xl text-xs transition-all ${
+                              allZCodeClaimed
+                                ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 cursor-not-allowed opacity-80'
+                                : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 cursor-pointer'
+                            }`}
                           >
-                            申领 1 亿 Tokens
+                            {allZCodeClaimed ? '今日已领 2 亿 Tokens' : '申领 2 亿 Tokens'}
                           </button>
                         </div>
                       </div>
@@ -2770,7 +2789,7 @@ export default function App() {
                       <div className="px-6 py-4 border-b border-emerald-100 flex items-center justify-between bg-emerald-50/40">
                         <div className="flex items-center gap-2">
                           <span className="material-symbols-outlined text-emerald-600 text-[18px]">token</span>
-                          <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">智谱 ZCode 账号池 (1 亿 Tokens)</h4>
+                          <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">智谱 ZCode 账号池 (2 亿 Tokens)</h4>
                         </div>
                         <span className="text-xs text-emerald-800 font-medium">{zcodeAccounts.length} 个账号</span>
                       </div>
@@ -2790,10 +2809,10 @@ export default function App() {
                                 <td className="px-6 py-3 font-bold text-ink">{acc.name}</td>
                                 <td className="px-6 py-3 font-mono text-emerald-800">BigModel API</td>
                                 <td className="px-6 py-3">
-                                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">已申领 1 亿 Tokens</span>
+                                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">已申领 2 亿 Tokens</span>
                                 </td>
                                 <td className="px-6 py-3 font-mono font-bold text-emerald-950">
-                                  100,000,000 / 100,000,000 Tokens (1 亿)
+                                  200,000,000 / 200,000,000 Tokens (2 亿)
                                 </td>
                               </tr>
                             ))}
@@ -3771,7 +3790,7 @@ export default function App() {
                     <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/70 flex items-center justify-between gap-3 text-xs text-emerald-900">
                       <div className="flex items-center gap-2">
                         <span className="material-symbols-outlined text-emerald-700 text-[18px]">verified</span>
-                        <span>{lang === 'zh' ? '智谱开放平台 API Key 即为 ZCode 的 PAT 凭据，每日专享 1 亿 Tokens 算力包。' : 'BigModel API Key acts as ZCode PAT, with 100M Tokens daily privilege.'}</span>
+                        <span>{lang === 'zh' ? '智谱开放平台 API Key 即为 ZCode 的 PAT 凭据，每日专享 2 亿 Tokens 算力包。' : 'BigModel API Key acts as ZCode PAT, with 200M Tokens daily privilege.'}</span>
                       </div>
                       <a
                         href="https://bigmodel.cn/usercenter/proj-mgmt/apikeys"

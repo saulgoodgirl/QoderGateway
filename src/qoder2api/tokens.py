@@ -116,7 +116,7 @@ def get_account_quota(uid: str) -> dict[str, Any]:
             "uid": uid,
             "quota": {
                 "isQuotaExceeded": False,
-                "userQuota": {"remaining": 100000000, "total": 100000000},
+                "userQuota": {"remaining": 200000000, "total": 200000000},
                 "plan": f"{provider.upper()} Gateway Pool",
             },
         }

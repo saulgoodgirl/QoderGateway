@@ -477,7 +477,7 @@ async def oauth_zcode_poll(payload: dict[str, Any], verify: None = Depends(check
                         uid, name, user_type, security_oauth_token, refresh_token, machine_id,
                         enabled, last_status, last_error, quota, is_quota_exceeded, plan,
                         user_tag, region, provider, base_url
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 100000000, 0, 'ZCode Free/Pro', 'BigModel', 'cn', 'zcode', '')
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 200000000, 0, 'ZCode Free/Pro', 'BigModel', 'cn', 'zcode', '')
                     """,
                     (uid, name, "zcode_user", token, jwt, str(uuid.uuid4()), enabled),
                 )
@@ -529,7 +529,7 @@ async def zcode_decrypt(payload: dict[str, Any], verify: None = Depends(check_ga
                     uid, name, user_type, security_oauth_token, refresh_token, machine_id,
                     enabled, last_status, last_error, quota, is_quota_exceeded, plan,
                     user_tag, region, provider, base_url
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 100000000, 0, 'ZCode Free/Pro', 'BigModel', 'cn', 'zcode', '')
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 200000000, 0, 'ZCode Free/Pro', 'BigModel', 'cn', 'zcode', '')
                 """,
                 (uid, name, "zcode_user", token, jwt, str(uuid.uuid4()), enabled),
             )
