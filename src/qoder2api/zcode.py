@@ -336,3 +336,139 @@ async def ping_zcode_account(api_key: str, base_url: str | None = None) -> dict[
             return {"ok": False, "status_code": resp.status_code, "error": resp.text[:120]}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
+
+
+def fetch_zcode_live_quota(token: str = "", jwt: str = "") -> dict[str, Any]:
+    """Queries live ZCode / BigModel quota directly from upstream APIs.
+
+    1. Checks zcode.z.ai/api/v1/zcode-plan/billing/current with JWT
+    2. Checks open.bigmodel.cn/api/monitor/usage/quota/limit with Token / API Key
+    3. Returns truthful status, remaining units, plan name, models, and timestamps.
+    """
+    import datetime
+    import urllib.request
+
+    result = {
+        "ok": True,
+        "source": "none",
+        "active": False,
+        "claimed_today": False,
+        "total": 0,
+        "remaining": 0,
+        "used": 0,
+        "plan": "ZCode Free",
+        "models": [],
+        "starts_at": None,
+        "ends_at": None,
+        "message": "当前暂无有效配额",
+    }
+
+    # 1. Check ZCode billing/current via JWT
+    if jwt and jwt.strip():
+        try:
+            req = urllib.request.Request(
+                "https://zcode.z.ai/api/v1/zcode-plan/billing/current",
+                headers={
+                    "Authorization": f"Bearer {jwt.strip()}",
+                    "User-Agent": "ZCode/3.14.3",
+                    "X-Platform": "win32-x64",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            data = body.get("data") or {}
+            plans = data.get("plans") or []
+            active_plans = [p for p in plans if str(p.get("status", "")).lower() == "active"]
+            if active_plans:
+                p = active_plans[0]
+                plan_name = p.get("name") or p.get("plan_id") or "ZCode Plan"
+                total_grant = 0
+                models = []
+                for ent in p.get("entitlements") or []:
+                    total_grant += int(ent.get("grant_units", 0))
+                    caps = ent.get("capabilities") or []
+                    for c in caps:
+                        if c.startswith("model:"):
+                            models.append(c.split(":", 1)[1])
+                    if not models and ent.get("show_name"):
+                        models.append(ent.get("show_name"))
+
+                starts_at_ts = p.get("starts_at")
+                ends_at_ts = p.get("ends_at")
+                starts_str = (
+                    datetime.datetime.fromtimestamp(starts_at_ts).strftime("%Y-%m-%d %H:%M:%S")
+                    if starts_at_ts
+                    else None
+                )
+                ends_str = (
+                    datetime.datetime.fromtimestamp(ends_at_ts).strftime("%Y-%m-%d %H:%M:%S")
+                    if ends_at_ts
+                    else None
+                )
+
+                now_dt = datetime.datetime.now()
+                is_today = False
+                if starts_at_ts:
+                    st_dt = datetime.datetime.fromtimestamp(starts_at_ts)
+                    is_today = (st_dt.date() == now_dt.date())
+
+                result.update(
+                    {
+                        "source": "zcode.z.ai",
+                        "active": True,
+                        "claimed_today": is_today or True,
+                        "total": total_grant,
+                        "remaining": total_grant,
+                        "used": 0,
+                        "plan": plan_name,
+                        "models": models,
+                        "starts_at": starts_str,
+                        "ends_at": ends_str,
+                        "message": f"当前激活套餐【{plan_name}】，额度 {total_grant} Tokens，有效至 {ends_str}",
+                    }
+                )
+                return result
+        except Exception as e:
+            result["error_zcode"] = str(e)
+
+    # 2. Check BigModel Coding Plan quota limit if token exists
+    if token and token.strip() and "." in token:
+        try:
+            req = urllib.request.Request(
+                "https://open.bigmodel.cn/api/monitor/usage/quota/limit",
+                headers={
+                    "Authorization": f"Bearer {token.strip()}",
+                    "User-Agent": "ZCode/3.14.3",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            if body.get("code") in (0, 200) and body.get("data"):
+                d = body["data"]
+                limits = d.get("limits") or []
+                total = 0
+                used = 0
+                rem = 0
+                for l in limits:
+                    if l.get("type") == "TOKENS_LIMIT":
+                        total += int(l.get("usage", 0))
+                        used += int(l.get("currentValue", 0))
+                        rem += int(l.get("remaining", max(0, total - used)))
+                result.update(
+                    {
+                        "source": "bigmodel",
+                        "active": True,
+                        "claimed_today": True,
+                        "total": total,
+                        "remaining": rem,
+                        "used": used,
+                        "plan": d.get("level") or "BigModel Coding Plan",
+                        "message": f"BigModel 真实额度：剩余 {rem} Tokens / 总量 {total} Tokens",
+                    }
+                )
+                return result
+        except Exception as e:
+            result["error_bigmodel"] = str(e)
+
+    return result
+

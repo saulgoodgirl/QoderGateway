@@ -102,14 +102,13 @@ const NAV_GROUPS: NavGroupDef[] = [
       { id: 'dashboard', icon: 'grid_view', labelZh: '系统总览', labelEn: 'Dashboard' },
       { id: 'accounts', icon: 'group', labelZh: '账号池集群', labelEn: 'Account Pool' },
       { id: 'checkin', icon: 'card_giftcard', labelZh: '每日签到', labelEn: 'Daily Rewards', badgeZh: '+100', badgeEn: '+100' },
-      { id: 'models', icon: 'psychology', labelZh: '模型矩阵 & 路由', labelEn: 'Models & Routing', badgeZh: '18 款', badgeEn: '18 Models' },
     ],
   },
   {
     groupZh: '对外服务与安全',
     groupEn: 'Services & Security',
     items: [
-      { id: 'api-keys', icon: 'key', labelZh: 'API Key & 绑定', labelEn: 'API Keys & Pools' },
+      { id: 'api-keys', icon: 'key', labelZh: 'API 接入 & 路由', labelEn: 'API Keys & Routing' },
       { id: 'playground', icon: 'chat', labelZh: '在线调试', labelEn: 'Playground' },
       { id: 'logs', icon: 'terminal', labelZh: '服务运行日志', labelEn: 'Service Logs' },
     ],
@@ -2903,48 +2902,6 @@ export default function App() {
             )
           })()}
 
-          {/* ─── MODEL MATRIX & ROUTING ─── */}
-          {activeTab === 'models' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div>
-                  <h3 className="text-xl font-bold text-ink">{lang === 'zh' ? '已实测验证模型矩阵 (18 款全量支持)' : 'Verified Model Matrix (18 Models)'}</h3>
-                  <p className="text-sm text-body mt-0.5">{lang === 'zh' ? '支持原生模型名称或在客户端后缀 @账号名 强制锁定特定上游账号' : 'Use native model IDs or append @account to target upstream sessions'}</p>
-                </div>
-                <button
-                  onClick={() => copyText(VERIFIED_MODELS.map(m => m.id).join('\n'), lang === 'zh' ? '已复制全部模型列表' : 'Copied all models')}
-                  className="px-4 py-2 bg-ink text-white font-bold rounded-xl text-xs hover:bg-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-[16px]">content_copy</span>
-                  <span>{lang === 'zh' ? '复制全部模型列表' : 'Copy All Models'}</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {VERIFIED_MODELS.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => copyText(item.id, `${lang === 'zh' ? '已复制模型标识' : 'Copied model'}: ${item.id}`)}
-                    className="p-5 bg-white border border-hairline rounded-2xl shadow-subtle hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${item.badge}`}>{item.vendor}</span>
-                      <span className="text-xs font-mono text-slate-400">{item.context} Context</span>
-                    </div>
-                    <div className="font-mono font-bold text-base text-ink mt-2.5 flex items-center justify-between">
-                      <span>{item.id}</span>
-                      <span className="material-symbols-outlined text-[18px] text-slate-300 group-hover:text-indigo-600 transition-colors">content_copy</span>
-                    </div>
-                    <p className="text-xs text-body mt-1.5 leading-relaxed">{lang === 'zh' ? item.descZh : item.descEn}</p>
-                    <div className="mt-3 pt-3 border-t border-hairline flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                      <span>首字响应: {item.latency}</span>
-                      <span className="text-indigo-600 group-hover:underline">{lang === 'zh' ? '点击复制标识' : 'Copy ID'}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* ─── AI PLAYGROUND ─── */}
           {activeTab === 'playground' && (

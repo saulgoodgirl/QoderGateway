@@ -262,7 +262,55 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
 
     provider = row["provider"] if "provider" in row.keys() else "qoder"
     if provider and provider != "qoder":
-        current_cycle = get_current_checkin_cycle()
+        if provider.lower() == "zcode":
+            from .zcode import fetch_zcode_live_quota
+
+            tok = row["security_oauth_token"] or ""
+            jwt = row["refresh_token"] or ""
+            q_res = fetch_zcode_live_quota(tok, jwt)
+
+            plan_name = q_res.get("plan") or "ZCode Trust Build"
+            rem = int(q_res.get("remaining", 0))
+            ends_str = q_res.get("ends_at") or "今日 24:00"
+
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE accounts SET last_checkin_cycle = ?, quota = ?, plan = ? WHERE uid = ?",
+                    (current_cycle, rem, plan_name, uid),
+                )
+            invalidate_checkin_cache()
+
+            if q_res.get("claimed_today") or q_res.get("active"):
+                return {
+                    "ok": True,
+                    "claimed": False,
+                    "already_claimed": True,
+                    "waiting_refresh": False,
+                    "is_enterprise": False,
+                    "credits": 0,
+                    "tokens": rem,
+                    "uid": uid,
+                    "name": row["name"],
+                    "provider": "zcode",
+                    "plan": plan_name,
+                    "message": f"【ZCode】今日已在官方激活生效【{plan_name}】({rem // 100000000} 亿 Token)，有效至 {ends_str}，无需重复领取",
+                }
+            else:
+                return {
+                    "ok": True,
+                    "claimed": True,
+                    "already_claimed": False,
+                    "waiting_refresh": False,
+                    "is_enterprise": False,
+                    "credits": 0,
+                    "tokens": rem,
+                    "uid": uid,
+                    "name": row["name"],
+                    "provider": "zcode",
+                    "plan": plan_name,
+                    "message": f"【ZCode】已同步上游配额：当前有效 {rem} Tokens",
+                }
+
         prev_cycle = row["last_checkin_cycle"] if "last_checkin_cycle" in row.keys() else None
         if prev_cycle == current_cycle and not force:
             return {
@@ -272,7 +320,7 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
                 "waiting_refresh": False,
                 "is_enterprise": False,
                 "credits": 0,
-                "tokens": 200000000 if provider.lower() == "zcode" else 0,
+                "tokens": 0,
                 "uid": uid,
                 "name": row["name"],
                 "provider": provider,
@@ -292,12 +340,13 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
             "waiting_refresh": False,
             "is_enterprise": False,
             "credits": 0,
-            "tokens": 200000000 if provider.lower() == "zcode" else 0,
+            "tokens": 0,
             "uid": uid,
             "name": row["name"],
             "provider": provider,
-            "message": f"【{provider.upper()}】每日 2 亿 Tokens 特权通道保活与配额维保已就绪",
+            "message": f"【{provider.upper()}】特权通道保活与配额维保已就绪",
         }
+
 
     if is_enterprise_account(row):
         return {
@@ -553,34 +602,88 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             streak = r["checkin_streak"] if "checkin_streak" in r.keys() else 1
             total_days = r["total_claim_days"] if "total_claim_days" in r.keys() else 1
             is_zcode = (provider.lower() == "zcode")
-            desc = "智谱官方 2 亿 Token 当日特权（每日 00:00 自动刷新）" if is_zcode else f"{provider.upper()} 官方上游直通通道"
+
+            if is_zcode:
+                from .zcode import fetch_zcode_live_quota
+
+                tok = r["security_oauth_token"] or ""
+                jwt = r["refresh_token"] or ""
+                q_res = fetch_zcode_live_quota(tok, jwt)
+
+                rem = int(q_res.get("remaining", 0))
+                tot = int(q_res.get("total", rem))
+                plan_name = q_res.get("plan") or "ZCode Free"
+                ends_str = q_res.get("ends_at") or "今日 24:00"
+                claimed_today = bool(q_res.get("claimed_today") or q_res.get("active") or is_done)
+
+                status_text = (
+                    f"今日已领 {rem // 100000000} 亿 Token"
+                    if rem >= 100000000
+                    else (f"已生效 {rem} Tokens" if rem > 0 else "无有效额度")
+                )
+                desc = (
+                    f"智谱官方【{plan_name}】{rem // 100000000} 亿 Token（有效至 {ends_str}）"
+                    if rem >= 100000000
+                    else f"智谱官方【{plan_name}】剩余 {rem} Tokens"
+                )
+
+                return {
+                    "uid": uid,
+                    "name": name,
+                    "plan": plan_name,
+                    "is_enterprise": False,
+                    "provider": "zcode",
+                    "claimed_today": claimed_today,
+                    "status_code": "claimed" if claimed_today else "pending",
+                    "status_text": status_text,
+                    "streak_days": streak or 1,
+                    "total_claim_days": total_days or 1,
+                    "reward_credits": 0,
+                    "reward_tokens": tot,
+                    "unit": "Tokens",
+                    "rem_credits": 0.0,
+                    "quota_info": {
+                        "remaining": rem,
+                        "total": tot,
+                        "used": 0,
+                        "plan_remaining": rem,
+                        "addon_remaining": 0,
+                        "unit": "Tokens",
+                        "desc": desc,
+                    },
+                    "quota_desc": desc,
+                    "error": None,
+                }
+
+            desc = f"{provider.upper()} 官方上游直通通道"
             return {
                 "uid": uid,
                 "name": name,
-                "plan": "智谱开放平台 API" if is_zcode else f"{provider.upper()} API",
+                "plan": f"{provider.upper()} API",
                 "is_enterprise": False,
                 "provider": provider,
-                "claimed_today": is_done or is_zcode,
-                "status_code": "claimed",
-                "status_text": "已申领 2 亿 Tokens" if is_zcode else "已在库生效",
+                "claimed_today": is_done,
+                "status_code": "claimed" if is_done else "pending",
+                "status_text": "已在库生效",
                 "streak_days": streak or 1,
                 "total_claim_days": total_days or 1,
                 "reward_credits": 0,
-                "reward_tokens": 200000000 if is_zcode else 0,
-                "unit": "Tokens" if is_zcode else "Credits",
+                "reward_tokens": 0,
+                "unit": "Tokens",
                 "rem_credits": 0.0,
                 "quota_info": {
-                    "remaining": 200000000 if is_zcode else 0,
-                    "total": 200000000 if is_zcode else 0,
+                    "remaining": 0,
+                    "total": 0,
                     "used": 0,
-                    "plan_remaining": 200000000 if is_zcode else 0,
+                    "plan_remaining": 0,
                     "addon_remaining": 0,
-                    "unit": "Tokens" if is_zcode else "Credits",
+                    "unit": "Tokens",
                     "desc": desc,
                 },
                 "quota_desc": desc,
                 "error": None,
             }
+
 
         plan = "Personal"
 
@@ -715,9 +818,9 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
     for a in zcode_accounts + custom_accounts:
         a.pop("rem_credits", None)
 
-    zcode_claimed_count = sum(1 for a in zcode_accounts if a["status_code"] == "claimed")
-    zcode_total_tokens_today = zcode_claimed_count * 200_000_000
-    zcode_remaining_tokens = 200_000_000 * len(zcode_accounts)
+    zcode_claimed_count = sum(1 for a in zcode_accounts if a.get("claimed_today") or a["status_code"] == "claimed")
+    zcode_total_tokens_today = sum(int(a.get("quota_info", {}).get("total", 0)) for a in zcode_accounts)
+    zcode_remaining_tokens = sum(int(a.get("quota_info", {}).get("remaining", 0)) for a in zcode_accounts)
 
     enterprise_remaining_credits = sum(_safe_float(r["quota"]) for r in enterprise_rows)
     pool_total_remaining_credits = round(personal_remaining_credits + enterprise_remaining_credits, 1)
@@ -749,8 +852,9 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
         "last_auto_date": _last_auto_checkin_cycle,
         "cycle_id": current_cycle,
         "next_refresh_seconds": next_refresh_seconds,
-        "refresh_rule": "每日 10:00 (UTC+8) 刷新 Qoder +100 Credits；每日 00:00 (UTC+8) 申领 ZCode 2 亿 Tokens",
+        "refresh_rule": "每日 10:00 (UTC+8) 刷新 Qoder +100 Credits；ZCode 额度按智谱官方活动有效期动态重置",
     }
+
 
     with _checkin_cache_lock:
         _cached_overview = result

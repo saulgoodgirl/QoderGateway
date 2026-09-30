@@ -110,16 +110,49 @@ def get_account_quota(uid: str) -> dict[str, Any]:
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
     provider = row["provider"] if "provider" in row.keys() else "qoder"
+    if provider and provider.lower() == "zcode":
+        from .zcode import fetch_zcode_live_quota
+
+        tok = row["security_oauth_token"] or ""
+        jwt = row["refresh_token"] or ""
+        q_res = fetch_zcode_live_quota(tok, jwt)
+
+        # Update database with authentic numbers from Zhipu / ZCode upstream
+        rem = int(q_res.get("remaining", 0))
+        tot = int(q_res.get("total", rem))
+        plan_name = q_res.get("plan") or "ZCode Free"
+        user_tag = "GLM-5.3-Flash" if "glm-5.3-flash" in [m.lower() for m in q_res.get("models", [])] else "ZCode"
+
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE accounts SET quota = ?, is_quota_exceeded = ?, plan = ?, user_tag = ? WHERE uid = ?",
+                (rem, 0 if rem > 0 else 1, plan_name, user_tag, uid),
+            )
+
+        return {
+            "ok": True,
+            "uid": uid,
+            "quota": {
+                "isQuotaExceeded": rem <= 0,
+                "userQuota": {"remaining": rem, "total": tot},
+                "plan": plan_name,
+                "active": q_res.get("active", False),
+                "starts_at": q_res.get("starts_at"),
+                "ends_at": q_res.get("ends_at"),
+                "models": q_res.get("models", []),
+            },
+        }
     if provider and provider != "qoder":
         return {
             "ok": True,
             "uid": uid,
             "quota": {
                 "isQuotaExceeded": False,
-                "userQuota": {"remaining": 200000000, "total": 200000000},
-                "plan": f"{provider.upper()} Gateway Pool",
+                "userQuota": {"remaining": 0, "total": 0},
+                "plan": f"{provider.upper()} API",
             },
         }
+
     tok = row["security_oauth_token"] or ""
     if not tok:
         return {"ok": False, "uid": uid, "error": "无 token"}
