@@ -783,6 +783,59 @@ export default function App() {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
+  const [copiedEndpoint, setCopiedEndpoint] = useState(false)
+
+  const copyToClipboard = useCallback((text: string, title?: string, desc?: string) => {
+    if (!text) return
+    const doToast = () => {
+      pushToast(
+        'SUCCESS',
+        title || (lang === 'zh' ? '已复制到剪贴板' : 'Copied'),
+        desc || text
+      )
+    }
+
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(doToast).catch(() => {
+        try {
+          const textArea = document.createElement("textarea")
+          textArea.value = text
+          textArea.style.position = "fixed"
+          textArea.style.top = "-9999px"
+          textArea.style.left = "-9999px"
+          document.body.appendChild(textArea)
+          textArea.focus()
+          textArea.select()
+          document.execCommand('copy')
+          document.body.removeChild(textArea)
+          doToast()
+        } catch {
+          pushToast('ERROR', lang === 'zh' ? '复制失败' : 'Copy Failed', text)
+        }
+      })
+    } else {
+      try {
+        const textArea = document.createElement("textarea")
+        textArea.value = text
+        textArea.style.position = "fixed"
+        textArea.style.top = "-9999px"
+        textArea.style.left = "-9999px"
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+        doToast()
+      } catch {
+        pushToast('ERROR', lang === 'zh' ? '复制失败' : 'Copy Failed', text)
+      }
+    }
+  }, [lang, pushToast])
+
+  const copyText = useCallback((text: string, title?: string, desc?: string) => {
+    copyToClipboard(text, title, desc)
+  }, [copyToClipboard])
+
   useEffect(() => {
     if (!token) return
     // 基础核心状态秒级拉取（轻量无阻塞）
@@ -1684,15 +1737,39 @@ export default function App() {
               <span>{lang === 'zh' ? '接入账号' : 'Add Account'}</span>
             </button>
 
-            <button
-              onClick={() => copyText('https://lite.bigbob.asia/v1', lang === 'zh' ? '已复制网关公网端点' : 'Copied Gateway URL')}
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-lg text-xs font-mono text-slate-700 transition-colors shrink-0 cursor-pointer"
-              title="点击复制完整公网端点: https://lite.bigbob.asia/v1"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span className="font-semibold text-slate-600">/v1</span>
-              <span className="material-symbols-outlined text-[13px] text-slate-400">content_copy</span>
-            </button>
+            {(() => {
+              const currentEndpoint = typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost:5173')
+                ? `${window.location.origin}/v1`
+                : 'https://lite.bigbob.asia/v1';
+
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    copyToClipboard(currentEndpoint, lang === 'zh' ? '已复制公网端点' : 'Copied Gateway URL', currentEndpoint);
+                    setCopiedEndpoint(true);
+                    setTimeout(() => setCopiedEndpoint(false), 2000);
+                  }}
+                  className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 border rounded-lg text-xs font-mono transition-all shrink-0 cursor-pointer ${
+                    copiedEndpoint
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700 shadow-xs'
+                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200/80 text-slate-700'
+                  }`}
+                  title={lang === 'zh' ? `点击复制完整公网端点: ${currentEndpoint}` : `Click to copy endpoint: ${currentEndpoint}`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${copiedEndpoint ? 'bg-emerald-600' : 'bg-emerald-500 animate-pulse'}`}></span>
+                  <span className="font-semibold text-slate-700">/v1</span>
+                  <span className="material-symbols-outlined text-[13px] text-slate-400">
+                    {copiedEndpoint ? 'check' : 'content_copy'}
+                  </span>
+                  {copiedEndpoint && (
+                    <span className="text-[10px] font-sans font-bold text-emerald-700 ml-0.5">
+                      {lang === 'zh' ? '已复制' : 'Copied'}
+                    </span>
+                  )}
+                </button>
+              );
+            })()}
 
             <div className="flex items-center gap-1 text-xs font-semibold pl-2 border-l border-hairline shrink-0">
               <a href="/documents" className="text-body hover:text-ink px-2 py-1 rounded transition-colors cursor-pointer">{t.common.docs}</a>
