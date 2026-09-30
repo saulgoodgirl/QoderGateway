@@ -36,7 +36,7 @@ function Landing() {
           <span className="w-10 h-10 bg-ink text-white rounded-xl inline-flex items-center justify-center leading-none">
             <span className="material-symbols-outlined block leading-none" style={{ fontVariationSettings: "'FILL' 1", fontSize: 22 }}>gate</span>
           </span>
-          <span className="font-display-sm text-ink">GETIT</span>
+          <span className="font-display-sm text-ink">GITIT</span>
         </a>
         <div className="flex items-center gap-3 text-sm font-bold">
           <button onClick={switchLang} className="px-4 py-2 text-body hover:text-ink transition-colors font-bold">{lang === 'zh' ? 'English' : '中文'}</button>

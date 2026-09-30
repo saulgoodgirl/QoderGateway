@@ -121,7 +121,7 @@ const UI_TEXT = {
     dashboard: {
       serviceStatus: 'Service Status', allGatewaysActive: 'All gateways active', noActiveSession: 'No active session', accountPool: 'Account Pool', activeSessions: 'Active provider accounts', apiAuth: 'API Auth', openAccess: 'Open access', activeUser: 'Active User', systemBriefing: 'System Briefing', readyBrief: 'Gateway is running. {count} account(s) are available for routing.', notReadyBrief: 'No active session is available. Import an account or add a PAT first.', recentNotifications: 'Recent Notifications', authImportError: 'Auth Import Error', sessionActive: 'Session Active', credentialConfig: 'Credential Configuration', credentialDesc: 'Add a provider credential or import local auth session.', patPlaceholder: 'Enter token or API key...', addPat: 'Add Account', saving: 'Saving...', autoImport: 'Auto Import',
     },
-    accounts: { desc: 'Manage multi-provider accounts (Qoder, ZCode, Custom) aggregated by GETIT. Toggle "API Routing" to include/exclude accounts from external calls while keeping maintenance active.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add credentials.', showing: 'Showing {count} account(s)' },
+    accounts: { desc: 'Manage multi-provider accounts (Qoder, ZCode, Custom) aggregated by GITIT. Toggle "API Routing" to include/exclude accounts from external calls while keeping maintenance active.', refreshStatus: 'Refresh Status', importAccounts: 'Import Accounts', search: 'Search accounts...', empty: 'No accounts imported. Click Import Accounts or add credentials.', showing: 'Showing {count} account(s)' },
     checkin: {
       bannerTitle: 'Daily Rewards · 100 Credits Per Account',
       desc: 'Claim 100 free compute credits every day for each personal Qoder account (Enterprise/Teams accounts are excluded as they share organization resources). Resets daily at 10:00 (UTC+8), valid for 30 days. Gateway auto-worker runs daily at 10:00:05 (UTC+8) to claim automatically.',
@@ -170,7 +170,7 @@ const UI_TEXT = {
     dashboard: {
       serviceStatus: '服务状态', allGatewaysActive: '网关可用', noActiveSession: '没有可用账号', accountPool: '账号池', activeSessions: '可用多厂商账号', apiAuth: 'API 鉴权', openAccess: '未开启鉴权', activeUser: '当前账号', systemBriefing: '运行状态', readyBrief: '网关正在运行，当前有 {count} 个账号可用于请求路由。', notReadyBrief: '当前没有可用会话，请先导入账号或添加凭据。', recentNotifications: '最近状态', authImportError: '本地登录导入失败', sessionActive: '账号已连接', credentialConfig: '凭据配置', credentialDesc: '添加各厂商凭据，或导入本机已有的登录会话。', patPlaceholder: '输入 Token 或 API Key...', addPat: '添加账号', saving: '保存中...', autoImport: '自动导入',
     },
-    accounts: { desc: '管理 GETIT 网关聚合的多厂商账号（Qoder、智谱 ZCode、自定义模型等）。可单独控制账号是否参与通用 API 调度或定向调用，离线账号仍享受自动化保活维保。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击添加账号或导入凭据。', showing: '共 {count} 个账号' },
+    accounts: { desc: '管理 GITIT 网关聚合的多厂商账号（Qoder、智谱 ZCode、自定义模型等）。可单独控制账号是否参与通用 API 调度或定向调用，离线账号仍享受自动化保活维保。', refreshStatus: '刷新状态', importAccounts: '导入账号', search: '搜索账号...', empty: '还没有导入账号。点击添加账号或导入凭据。', showing: '共 {count} 个账号' },
     checkin: {
       bannerTitle: '每日签到福利 · 每个个人账号 +100 Credits',
       desc: '每个 Qoder 个人账号每天可免费领取 100 算力 Credits（企业团队版由组织统一分配算力，不参与每日签到已自动剔除）。官方每日 10:00 (UTC+8) 准时刷新，领取后 30 天有效。网关后台守护线程将在每日 10:00:05 准时自动执行签到补领，也可随时一键为全部账号领完。',
@@ -1182,7 +1182,7 @@ export default function App() {
               <div className="w-10 h-10 bg-ink rounded-lg flex items-center justify-center mb-4">
                 <span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>gate</span>
               </div>
-              <h1 className="font-display-lg text-ink tracking-tight">GETIT</h1>
+              <h1 className="font-display-lg text-ink tracking-tight">GITIT</h1>
               <p className="text-[12px] font-semibold text-on-surface-variant mt-2 uppercase tracking-widest">{lang === 'zh' ? '多厂商 AI 聚合网关控制台' : 'Universal Multi-Provider Gateway'}</p>
             </div>
             <form className="space-y-6" onSubmit={handleVerifyToken}>
@@ -1233,7 +1233,7 @@ export default function App() {
       <aside ref={sidebarRef} className="fixed left-0 top-0 h-screen w-[280px] bg-surface border-r border-hairline flex flex-col p-6 z-50">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 bg-ink rounded-lg flex items-center justify-center"><span className="material-symbols-outlined text-white" style={{ fontVariationSettings: "'FILL' 1" }}>gate</span></div>
-          <div><h1 className="font-display-sm text-ink leading-none">GETIT</h1><p className="text-[10px] uppercase tracking-widest text-body opacity-60">{lang === 'zh' ? '多厂商聚合网关' : 'Multi-Provider Gateway'}</p></div>
+          <div><h1 className="font-display-sm text-ink leading-none">GITIT</h1><p className="text-[10px] uppercase tracking-widest text-body opacity-60">{lang === 'zh' ? '多厂商聚合网关' : 'Multi-Provider Gateway'}</p></div>
         </div>
         <nav className="flex-1 space-y-1">
           {NAV_ITEMS.map((item) => (
@@ -1326,7 +1326,7 @@ export default function App() {
                   </div>
                   <div className="mt-auto bg-ink/5 p-4 rounded-lg border border-hairline-strong" ref={terminalRef}>
                     <code className="text-sm font-mono text-ink">
-                      <span className="text-primary font-bold">system@getit:~$</span> status --check --all<br />
+                      <span className="text-primary font-bold">system@gitit:~$</span> status --check --all<br />
                       <span className="term-line opacity-70">Checking upstream provider nodes... [{status.ready ? 'OK' : (loading && accountsConfig.accounts.length === 0 ? 'SYNCING...' : 'FAIL')}]<br /></span>
                       <span className="term-line opacity-70">Multi-provider engine: [Qoder: ACTIVE] [ZCode: ACTIVE] [Custom: READY]<br /></span>
                       <span className="term-line opacity-70">Routing traffic to optimal provider & account...</span><span className="cursor-blink">_</span>
