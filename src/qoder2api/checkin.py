@@ -535,28 +535,33 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
             is_done = (prev_cycle == current_cycle)
             streak = r["checkin_streak"] if "checkin_streak" in r.keys() else 1
             total_days = r["total_claim_days"] if "total_claim_days" in r.keys() else 1
+            is_zcode = (provider.lower() == "zcode")
+            desc = "智谱官方 1 亿 Token 当日特权（每日 00:00 自动刷新）" if is_zcode else f"{provider.upper()} 官方上游直通通道"
             return {
                 "uid": uid,
                 "name": name,
-                "plan": f"{provider.upper()} API",
+                "plan": "智谱开放平台 API" if is_zcode else f"{provider.upper()} API",
                 "is_enterprise": False,
                 "provider": provider,
-                "claimed_today": is_done,
-                "status_code": "claimed" if is_done else "pending",
-                "status_text": "今日维保已完成" if is_done else "通道正常（待维保打卡）",
+                "claimed_today": is_done or is_zcode,
+                "status_code": "claimed",
+                "status_text": "已申领 1 亿 Tokens" if is_zcode else "已在库生效",
                 "streak_days": streak or 1,
                 "total_claim_days": total_days or 1,
                 "reward_credits": 0,
+                "reward_tokens": 100000000 if is_zcode else 0,
+                "unit": "Tokens" if is_zcode else "Credits",
                 "rem_credits": 0.0,
                 "quota_info": {
-                    "remaining": 100000000,
-                    "total": 100000000,
+                    "remaining": 100000000 if is_zcode else 0,
+                    "total": 100000000 if is_zcode else 0,
                     "used": 0,
-                    "plan_remaining": 100000000,
+                    "plan_remaining": 100000000 if is_zcode else 0,
                     "addon_remaining": 0,
-                    "desc": f"{provider.upper()} 官方上游直通通道",
+                    "unit": "Tokens" if is_zcode else "Credits",
+                    "desc": desc,
                 },
-                "quota_desc": f"{provider.upper()} 官方上游直通通道",
+                "quota_desc": desc,
                 "error": None,
             }
 
@@ -680,30 +685,54 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
     else:
         accounts_detail = []
 
-    claimed_count = sum(1 for a in accounts_detail if a["status_code"] == "claimed")
-    pending_count = sum(1 for a in accounts_detail if a["status_code"] == "pending")
-    waiting_count = sum(1 for a in accounts_detail if a["status_code"] == "waiting_refresh")
-    total_credits_claimed_today = claimed_count * 100
-    personal_remaining_credits = round(sum(a.pop("rem_credits", 0.0) for a in accounts_detail), 1)
+    qoder_accounts = [a for a in accounts_detail if a.get("provider", "qoder") == "qoder"]
+    zcode_accounts = [a for a in accounts_detail if a.get("provider") == "zcode"]
+    custom_accounts = [a for a in accounts_detail if a.get("provider") not in ("qoder", "zcode", None)]
+
+    qoder_claimed_count = sum(1 for a in qoder_accounts if a["status_code"] == "claimed")
+    qoder_pending_count = sum(1 for a in qoder_accounts if a["status_code"] == "pending")
+    qoder_waiting_count = sum(1 for a in qoder_accounts if a["status_code"] == "waiting_refresh")
+    qoder_total_credits_today = qoder_claimed_count * 100
+    personal_remaining_credits = round(sum(a.pop("rem_credits", 0.0) for a in qoder_accounts), 1)
+
+    for a in zcode_accounts + custom_accounts:
+        a.pop("rem_credits", None)
+
+    zcode_claimed_count = sum(1 for a in zcode_accounts if a["status_code"] == "claimed")
+    zcode_total_tokens_today = zcode_claimed_count * 100_000_000
+    zcode_remaining_tokens = 100_000_000 * len(zcode_accounts)
 
     enterprise_remaining_credits = sum(_safe_float(r["quota"]) for r in enterprise_rows)
     pool_total_remaining_credits = round(personal_remaining_credits + enterprise_remaining_credits, 1)
 
     result = {
-        "total_accounts": len(personal_rows),
-        "claimed_count": claimed_count,
-        "pending_count": pending_count,
-        "waiting_count": waiting_count,
+        # Qoder specific & overall compatible
+        "total_accounts": len(qoder_accounts),
+        "claimed_count": qoder_claimed_count,
+        "pending_count": qoder_pending_count,
+        "waiting_count": qoder_waiting_count,
         "is_before_10am": is_before_10am,
-        "total_credits_claimed_today": total_credits_claimed_today,
+        "total_credits_claimed_today": qoder_total_credits_today,
         "total_remaining_credits": personal_remaining_credits,
         "pool_total_remaining_credits": pool_total_remaining_credits,
         "enterprise_excluded_count": len(enterprise_rows),
+
+        # ZCode specific
+        "zcode_total_accounts": len(zcode_accounts),
+        "zcode_claimed_count": zcode_claimed_count,
+        "zcode_total_tokens_today": zcode_total_tokens_today,
+        "zcode_remaining_tokens": zcode_remaining_tokens,
+
+        # Accounts lists
         "accounts": accounts_detail,
+        "qoder_accounts": qoder_accounts,
+        "zcode_accounts": zcode_accounts,
+        "custom_accounts": custom_accounts,
+
         "last_auto_date": _last_auto_checkin_cycle,
         "cycle_id": current_cycle,
         "next_refresh_seconds": next_refresh_seconds,
-        "refresh_rule": "每日 10:00 (UTC+8) 刷新，个人版领取后 30 天有效 + 100 Credits (企业免签版已自动剔除)",
+        "refresh_rule": "每日 10:00 (UTC+8) 刷新 Qoder +100 Credits；每日 00:00 (UTC+8) 申领 ZCode 1 亿 Tokens",
     }
 
     with _checkin_cache_lock:

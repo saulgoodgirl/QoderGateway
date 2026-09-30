@@ -31,12 +31,15 @@ interface CheckinAccount {
   uid: string
   name: string
   plan: string
+  provider?: string
   user_type?: string
   is_enterprise?: boolean
   claimed_today: boolean
   status_code?: 'waiting_refresh' | 'pending' | 'claimed'
   status_text: string
   reward_credits: number
+  reward_tokens?: number
+  unit?: string
   streak_days: number
   total_claim_days: number
   quota_info: {
@@ -47,6 +50,7 @@ interface CheckinAccount {
     addon_remaining?: number
     org_remaining?: number
     desc?: string
+    unit?: string
   } | null
   quota_desc?: string
   error: string | null
@@ -63,6 +67,12 @@ interface CheckinOverview {
   pool_total_remaining_credits?: number
   enterprise_excluded_count?: number
   accounts: CheckinAccount[]
+  qoder_accounts?: CheckinAccount[]
+  zcode_accounts?: CheckinAccount[]
+  zcode_total_accounts?: number
+  zcode_claimed_count?: number
+  zcode_total_tokens_today?: number
+  zcode_remaining_tokens?: number
   last_auto_date: string | null
   cycle_id?: string
   next_refresh_seconds?: number
@@ -494,6 +504,7 @@ export default function App() {
   const [claimingCheckin, setClaimingCheckin] = useState(false)
   const [claimingUid, setClaimingUid] = useState<string | null>(null)
   const [countdownSecs, setCountdownSecs] = useState<number | null>(null)
+  const [checkinSubTab, setCheckinSubTab] = useState<'qoder' | 'zcode' | 'all'>('qoder')
 
   const [showAddAccountModal, setShowAddAccountModal] = useState(false)
   const [addAccountTab, setAddAccountTab] = useState<'pat' | 'zcode' | 'custom' | 'batch' | 'local'>('pat')
@@ -1971,332 +1982,712 @@ export default function App() {
           )}
 
           {/* ─── DAILY REWARDS & CHECK-IN ─── */}
-          {activeTab === 'checkin' && (
-            <div className="space-y-8">
-              {/* Dual Mission Banners Grid (Matching Screenshot media_1790736598779.png) */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                
-                {/* Banner A: Qoder 10:00:05 +100 Credits */}
-                <div className="p-8 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-3xl border border-indigo-800 shadow-elevated relative overflow-hidden flex flex-col justify-between group">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="px-2.5 py-1 rounded-full bg-indigo-500/30 border border-indigo-400/30 text-xs font-bold text-indigo-200 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>{lang === 'zh' ? 'Qoder 官方权益中心' : 'Qoder Rewards Center'}
-                      </span>
-                      <span className="text-xs font-mono font-bold text-indigo-300">10:00:05 (UTC+8) {lang === 'zh' ? '刷新' : 'Reset'}</span>
-                    </div>
-                    <h3 className="text-2xl font-black text-white">{lang === 'zh' ? '个人账号每日 +100 算力加油包' : 'Personal Account Daily +100 Credits'}</h3>
-                    <p className="text-xs text-indigo-200 leading-relaxed max-w-xl">
-                      {lang === 'zh'
-                        ? '针对个人版 Qoder 账号每日官方放量，领取后 30 天有效。企业 Teams 账号由于组织分配算力已由系统精准过滤，免除无效打卡。'
-                        : 'Claims 100 free credits daily for personal accounts (30 days validity). Enterprise Teams accounts are excluded.'}
-                    </p>
-                  </div>
+          {activeTab === 'checkin' && (() => {
+            const qoderAccounts = (checkinData?.accounts || []).filter(a => a.provider === 'qoder' || !a.provider)
+            const zcodeAccounts = (checkinData?.accounts || []).filter(a => a.provider === 'zcode')
+            const qoderClaimedCount = qoderAccounts.filter(a => a.status_code === 'claimed').length
+            const zcodeClaimedCount = zcodeAccounts.filter(a => a.status_code === 'claimed' || a.claimed_today).length
 
-                  <div className="pt-8 mt-6 border-t border-indigo-800/80 flex items-center justify-between flex-wrap gap-4">
-                    <div>
-                      <span className="text-[11px] text-indigo-300 block font-medium">{lang === 'zh' ? '今日 Qoder 状态' : 'Today Qoder Status'}</span>
-                      <div className="text-lg font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
-                        <span className="font-black text-xl">+{checkinData?.total_credits_claimed_today || 100}</span> {checkinData?.claimed_count ? (lang === 'zh' ? '已全量到账' : 'Claimed') : (lang === 'zh' ? '已全量到账' : 'All Claimed')}
-                      </div>
-                    </div>
-                    <button
-                      onClick={doClaimAllCheckin}
-                      disabled={claimingCheckin}
-                      className="px-5 py-2.5 bg-white text-indigo-950 font-black rounded-xl text-xs hover:bg-indigo-50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-                    >
-                      <span className={`material-symbols-outlined text-[16px] text-indigo-700 ${claimingCheckin ? 'animate-spin' : ''}`}>autorenew</span>
-                      <span>{claimingCheckin ? (lang === 'zh' ? '正在领取...' : 'Claiming...') : (lang === 'zh' ? '一键重领 Qoder' : 'Claim Qoder Now')}</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Banner B: ZCode 00:00:05 1 亿 Token */}
-                <div className="p-8 bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900 text-white rounded-3xl border border-emerald-800 shadow-elevated relative overflow-hidden flex flex-col justify-between group">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/30 border border-emerald-400/30 text-xs font-bold text-emerald-200 flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>{lang === 'zh' ? 'ZCode 每日 1 亿 Token 特权' : 'ZCode Daily 100M Tokens'}
-                      </span>
-                      <span className="text-xs font-mono font-bold text-emerald-300">00:00:05 (UTC+8) {lang === 'zh' ? '刷新' : 'Reset'}</span>
-                    </div>
-                    <h3 className="text-2xl font-black text-white">{lang === 'zh' ? 'ZCode 每日 1 亿 Token 领券活动' : 'ZCode Daily 100M Token Campaign'}</h3>
-                    <p className="text-xs text-emerald-200 leading-relaxed max-w-xl">
-                      {lang === 'zh'
-                        ? '自动模拟 ZCode 客户端心跳并向官方权益 API 请求当天的 1 亿 Token 免费算力包。支持多账号并发领券，当天全量打入账号池！'
-                        : 'Claims 100,000,000 free tokens daily via Zhipu ZCode API directly into your pool.'}
-                    </p>
-                  </div>
-
-                  <div className="pt-8 mt-6 border-t border-emerald-800/80 flex items-center justify-between flex-wrap gap-4">
-                    <div>
-                      <span className="text-[11px] text-emerald-300 block font-medium">{lang === 'zh' ? '今日 ZCode 状态' : 'Today ZCode Status'}</span>
-                      <div className="text-lg font-bold text-emerald-300 flex items-center gap-1.5 mt-0.5">
-                        <span className="font-black text-xl font-mono">100,000,000</span> Tokens {lang === 'zh' ? '在库' : 'Active'}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => pushToast('SUCCESS', lang === 'zh' ? 'ZCode 领券成功' : 'Claimed Successfully', lang === 'zh' ? '已向智谱开放平台成功申领 100,000,000 Tokens 当日特权！' : '100,000,000 Tokens claimed')}
-                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition-all flex items-center gap-2 shadow-md shadow-emerald-950/50 cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px] text-slate-950" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
-                      <span>{lang === 'zh' ? '一键领 1 亿 Tokens' : 'Claim 100M Tokens'}</span>
-                    </button>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Schedule Daemons Section (Matching Screenshot) */}
-              <div className="bg-white border border-hairline rounded-3xl p-8 shadow-subtle space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <h4 className="font-bold text-ink text-base">{lang === 'zh' ? '双轨定时守护进程 (Autonomous Schedule Daemons)' : 'Autonomous Schedule Daemons'}</h4>
-                    <p className="text-xs text-body mt-1">{lang === 'zh' ? '运行于 Server A 后台守护线程，开机启动 3 秒全量补漏，定时点准时自动入账' : 'Running on Server A background thread with boot auto-reconciliation'}</p>
-                  </div>
-                  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200 flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>{lang === 'zh' ? '双时钟守护运行中' : 'Dual Timers Active'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Daemon 1: Qoder */}
-                  <div className="p-5 rounded-2xl bg-slate-50/70 border border-hairline flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-2xl">schedule</span>
-                      </div>
-                      <div>
-                        <div className="font-bold text-ink text-sm">{lang === 'zh' ? 'Qoder 每日 10:00:05 守护线程' : 'Qoder 10:00:05 Daemon'}</div>
-                        <div className="text-xs text-body font-mono mt-0.5">{lang === 'zh' ? '下次执行倒计时' : 'Next reset in'}: <span className="text-indigo-600 font-bold">{formatCountdown(countdownSecs)}</span></div>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-100/70 text-emerald-800">{lang === 'zh' ? '活跃守护' : 'Active'}</span>
-                  </div>
-
-                  {/* Daemon 2: ZCode */}
-                  <div className="p-5 rounded-2xl bg-slate-50/70 border border-hairline flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-2xl">alarm_on</span>
-                      </div>
-                      <div>
-                        <div className="font-bold text-ink text-sm">{lang === 'zh' ? 'ZCode 每日 00:00:05 1亿 Token 守护' : 'ZCode 00:00:05 100M Token Daemon'}</div>
-                        <div className="text-xs text-body font-mono mt-0.5">{lang === 'zh' ? '下次执行倒计时' : 'Next reset in'}: <span className="text-emerald-600 font-bold">{formatCountdown(((countdownSecs || 0) + 14 * 3600) % 86400)}</span></div>
-                      </div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-100/70 text-emerald-800">{lang === 'zh' ? '活跃守护' : 'Active'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4 Stats Cards */}
-              <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
-                    <span>{t.checkin.statsClaimedRate}</span>
-                    <span className="material-symbols-outlined text-base text-emerald-500">task_alt</span>
-                  </div>
-                  <div className="text-3xl font-bold text-ink">
-                    {checkinData?.is_before_10am ? 0 : (checkinData?.claimed_count ?? 0)}
-                    <span className="text-base font-normal text-body ml-1">/ {checkinData?.total_accounts ?? 0}</span>
-                  </div>
-                  <div className="mt-3 w-full bg-hairline h-2 rounded-full overflow-hidden">
-                    <div
-                      className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${!checkinData?.is_before_10am && (checkinData?.total_accounts ?? 0) > 0 ? ((checkinData?.claimed_count ?? 0) / (checkinData?.total_accounts ?? 1)) * 100 : 0}%`
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
-                    <span>{t.checkin.statsCreditsToday}</span>
-                    <span className="material-symbols-outlined text-base text-amber-500" style={{ fontVariationSettings: "'FILL' 1" }}>military_tech</span>
-                  </div>
-                  <div className="text-3xl font-bold text-amber-600">
-                    +{checkinData?.is_before_10am ? 0 : (checkinData?.total_credits_claimed_today ?? 0)}
-                    <span className="text-xs font-semibold text-body ml-1 uppercase">Credits</span>
-                  </div>
-                  <div className="text-xs text-body mt-2">
-                    {checkinData?.is_before_10am
-                      ? (lang === 'zh' ? '等待 10:00 刷新后自动发放' : 'Available after 10:00')
-                      : (lang === 'zh' ? '个人版每账号单次奖励 100 Credits' : '+100 credits for personal accounts')}
-                  </div>
-                </div>
-
-                <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
-                    <span>{lang === 'zh' ? '个人可用总算力' : 'Personal Credits'}</span>
-                    <span className="material-symbols-outlined text-base text-purple-500">token</span>
-                  </div>
-                  <div className="text-3xl font-bold text-ink">
-                    {checkinData?.total_remaining_credits?.toLocaleString() ?? '--'}
-                    <span className="text-xs font-semibold text-body ml-1 uppercase">Credits</span>
-                  </div>
-                  <div className="text-xs text-body mt-2">
-                    {lang === 'zh'
-                      ? (checkinData?.enterprise_excluded_count ? `共 ${(checkinData?.total_accounts ?? 0)} 个个人账号 (企业版不参与已剔除)` : '参与签到个人账号可用总剩余算力')
-                      : 'Total remaining across personal check-in accounts'}
-                  </div>
-                </div>
-
-                <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
-                    <span>{t.checkin.statsAutoSchedule}</span>
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mint opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-mint"></span>
-                    </span>
-                  </div>
-                  <div className="text-xl font-bold text-ink flex items-center gap-2">
-                    <span>每日 10:00 (UTC+8)</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-mint/20 text-ink font-bold">ACTIVE</span>
-                  </div>
-                  <div className="text-xs text-body mt-2">
-                    {lang === 'zh' ? `倒计时 ${formatCountdown(countdownSecs)} · 准时自动入账` : `Reset in ${formatCountdown(countdownSecs)}`}
-                  </div>
-                </div>
-              </section>
-
-              {/* Accounts Table */}
-              <section className="glass-card rounded-2xl border border-hairline overflow-hidden shadow-sm">
-                <div className="px-6 py-4 border-b border-hairline flex items-center justify-between bg-canvas-soft/30">
+            return (
+              <div className="space-y-6">
+                {/* Checkin Top Sub-Tabs Navigation */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-hairline pb-4">
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-ink text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>card_giftcard</span>
-                    <h4 className="text-sm font-bold text-ink">{t.checkin.tableTitle}</h4>
+                    <div className="inline-flex p-1 bg-surface-ground border border-hairline rounded-2xl gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setCheckinSubTab('qoder')}
+                        className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+                          checkinSubTab === 'qoder'
+                            ? 'bg-ink text-white shadow-xs'
+                            : 'text-body hover:text-ink'
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                        <span>{lang === 'zh' ? 'Qoder 每日签到 (+100 Credits)' : 'Qoder Check-in (+100 Credits)'}</span>
+                        <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500 text-[10px] font-mono font-bold">
+                          {qoderAccounts.length}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setCheckinSubTab('zcode')}
+                        className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+                          checkinSubTab === 'zcode'
+                            ? 'bg-emerald-700 text-white shadow-xs'
+                            : 'text-body hover:text-emerald-700'
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>{lang === 'zh' ? '智谱 ZCode 每日特权 (1 亿 Tokens)' : 'ZCode Daily (100M Tokens)'}</span>
+                        <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-mono font-bold">
+                          {zcodeAccounts.length}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setCheckinSubTab('all')}
+                        className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+                          checkinSubTab === 'all'
+                            ? 'bg-ink text-white shadow-xs'
+                            : 'text-body hover:text-ink'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[15px]">view_agenda</span>
+                        <span>{lang === 'zh' ? '双轨全景视图' : 'Dual-Engine Overview'}</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-xs text-body flex items-center gap-2">
-                    <span>{lang === 'zh' ? `共 ${checkinData?.accounts?.length ?? 0} 个个人账号` : `${checkinData?.accounts?.length ?? 0} personal accounts`}</span>
-                    {Boolean(checkinData?.enterprise_excluded_count) && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neutral-100 text-neutral-600 border border-neutral-200">
-                        {lang === 'zh' ? `已剔除 ${checkinData?.enterprise_excluded_count} 个企业免签账号` : `${checkinData?.enterprise_excluded_count} enterprise account(s) excluded`}
-                      </span>
-                    )}
+
+                  <div className="flex items-center gap-2 text-xs text-body self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={fetchCheckinStatus}
+                      disabled={loadingCheckin}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-hairline hover:bg-black/5 text-ink font-semibold transition-colors cursor-pointer"
+                    >
+                      <span className={`material-symbols-outlined text-[16px] ${loadingCheckin ? 'animate-spin' : ''}`}>refresh</span>
+                      <span>{lang === 'zh' ? '刷新权益状态' : 'Refresh'}</span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-canvas-soft border-b border-hairline">
-                      <tr>
-                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colAccount}</th>
-                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colPlan}</th>
-                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colStatus}</th>
-                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colStreak}</th>
-                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colQuota}</th>
-                        <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider text-right">{t.checkin.colActions}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-hairline">
-                      {(!checkinData?.accounts || checkinData.accounts.length === 0) ? (
-                        <tr>
-                          <td colSpan={6} className="py-12 text-center text-xs text-body">
-                            {t.checkin.empty}
-                          </td>
-                        </tr>
-                      ) : (
-                        checkinData.accounts.map((acc) => (
-                          <tr key={acc.uid} className="hover:bg-canvas-soft transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="font-bold text-ink">{acc.name}</div>
-                              <div className="font-mono text-[11px] text-body opacity-60 select-all">{acc.uid}</div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-neutral-100 text-neutral-700 capitalize">
-                                {acc.plan || 'Teams'}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              {acc.status_code === 'waiting_refresh' ? (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                                  <span className="material-symbols-outlined text-[14px]">schedule</span>
-                                  {t.checkin.waitingRefreshStatus}
-                                </span>
-                              ) : acc.claimed_today ? (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-                                  <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                                  {t.checkin.claimedStatus}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                                  <span className="material-symbols-outlined text-[14px]">warning</span>
-                                  {t.checkin.pendingStatus}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 font-mono text-sm text-ink">
-                              {(acc.streak_days && acc.streak_days > 0) ? acc.streak_days : (acc.claimed_today ? 1 : 0)} <span className="text-xs text-body font-normal">{lang === 'zh' ? '天' : 'days'}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              {acc.quota_info ? (
-                                <div className="space-y-1">
-                                  <div className="font-mono text-xs font-semibold text-ink">
-                                    {acc.quota_info.remaining?.toLocaleString()} <span className="text-[10px] text-body font-normal">/ {acc.quota_info.total?.toLocaleString()} Credits</span>
-                                  </div>
-                                  <div className="w-28 bg-hairline h-1.5 rounded-full overflow-hidden">
-                                    <div
-                                      className="bg-mint h-full rounded-full"
-                                      style={{
-                                        width: `${Math.min(100, Math.max(5, (acc.quota_info.remaining / (acc.quota_info.total || 1)) * 100))}%`
-                                      }}
-                                    />
-                                  </div>
-                                  {(acc.quota_desc || acc.quota_info.desc) && (
-                                    <div className="text-[11px] text-body opacity-80 leading-snug pt-0.5">
-                                      {acc.quota_desc || acc.quota_info.desc}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-xs font-mono text-body">--</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              {acc.status_code === 'waiting_refresh' ? (
-                                <button
-                                  disabled
-                                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
-                                >
-                                  {t.checkin.waitingRefreshBtn}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => doClaimOneCheckin(acc.uid)}
-                                  disabled={acc.claimed_today || claimingUid === acc.uid}
-                                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                                    acc.claimed_today
-                                      ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
-                                      : 'bg-ink text-white hover:bg-neutral-800 shadow-sm cursor-pointer'
-                                  }`}
-                                >
-                                  {claimingUid === acc.uid ? (
-                                    <span className="inline-flex items-center gap-1">
-                                      <svg className="animate-spin h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                      </svg>
-                                      ...
+                {/* Sub-Tab 1: QODER EXCLUSIVE VIEW */}
+                {checkinSubTab === 'qoder' && (
+                  <div className="space-y-8 animate-in fade-in duration-200">
+                    {/* Qoder Hero Banner */}
+                    <div className="p-8 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-3xl border border-indigo-800 shadow-elevated relative overflow-hidden flex flex-col justify-between group">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-full bg-indigo-500/30 border border-indigo-400/30 text-xs font-bold text-indigo-200 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-400"></span>{lang === 'zh' ? 'Qoder 官方权益中心' : 'Qoder Rewards Center'}
+                          </span>
+                          <span className="text-xs font-mono font-bold text-indigo-300">10:00:05 (UTC+8) {lang === 'zh' ? '刷新' : 'Reset'}</span>
+                        </div>
+                        <h3 className="text-2xl font-black text-white">{lang === 'zh' ? '个人账号每日 +100 算力加油包' : 'Personal Account Daily +100 Credits'}</h3>
+                        <p className="text-xs text-indigo-200 leading-relaxed max-w-xl">
+                          {lang === 'zh'
+                            ? '针对个人版 Qoder 账号每日官方放量，领取后 30 天有效。企业 Teams 账号由于组织分配算力已由系统精准过滤，免除无效打卡。'
+                            : 'Claims 100 free credits daily for personal accounts (30 days validity). Enterprise Teams accounts are excluded.'}
+                        </p>
+                      </div>
+
+                      <div className="pt-8 mt-6 border-t border-indigo-800/80 flex items-center justify-between flex-wrap gap-4">
+                        <div>
+                          <span className="text-[11px] text-indigo-300 block font-medium">{lang === 'zh' ? '今日 Qoder 状态' : 'Today Qoder Status'}</span>
+                          <div className="text-lg font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
+                            <span className="font-black text-xl">+{checkinData?.total_credits_claimed_today || (qoderClaimedCount * 100)}</span> {qoderClaimedCount ? (lang === 'zh' ? '已全量到账' : 'Claimed') : (lang === 'zh' ? '已全量到账' : 'All Claimed')}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={doClaimAllCheckin}
+                          disabled={claimingCheckin}
+                          className="px-5 py-2.5 bg-white text-indigo-950 font-black rounded-xl text-xs hover:bg-indigo-50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+                        >
+                          <span className={`material-symbols-outlined text-[16px] text-indigo-700 ${claimingCheckin ? 'animate-spin' : ''}`}>autorenew</span>
+                          <span>{claimingCheckin ? (lang === 'zh' ? '正在领取...' : 'Claiming...') : (lang === 'zh' ? '一键重领 Qoder' : 'Claim Qoder Now')}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Qoder Daemon Card */}
+                    <div className="p-5 rounded-2xl bg-white border border-hairline flex items-center justify-between shadow-xs">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-2xl">schedule</span>
+                        </div>
+                        <div>
+                          <div className="font-bold text-ink text-sm">{lang === 'zh' ? 'Qoder 每日 10:00:05 晨检守护线程' : 'Qoder 10:00:05 Daemon'}</div>
+                          <div className="text-xs text-body font-mono mt-0.5">{lang === 'zh' ? '下次执行倒计时' : 'Next reset in'}: <span className="text-indigo-600 font-bold">{formatCountdown(countdownSecs)}</span></div>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-100/70 text-emerald-800">{lang === 'zh' ? '活跃守护中' : 'Active'}</span>
+                    </div>
+
+                    {/* Qoder 4 Stats Cards */}
+                    <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                          <span>{t.checkin.statsClaimedRate}</span>
+                          <span className="material-symbols-outlined text-base text-emerald-500">task_alt</span>
+                        </div>
+                        <div className="text-3xl font-bold text-ink">
+                          {checkinData?.is_before_10am ? 0 : qoderClaimedCount}
+                          <span className="text-base font-normal text-body ml-1">/ {qoderAccounts.length}</span>
+                        </div>
+                        <div className="mt-3 w-full bg-hairline h-2 rounded-full overflow-hidden">
+                          <div
+                            className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${!checkinData?.is_before_10am && qoderAccounts.length > 0 ? (qoderClaimedCount / qoderAccounts.length) * 100 : 0}%`
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                          <span>{t.checkin.statsCreditsToday}</span>
+                          <span className="material-symbols-outlined text-base text-amber-500" style={{ fontVariationSettings: "'FILL' 1" }}>military_tech</span>
+                        </div>
+                        <div className="text-3xl font-bold text-amber-600">
+                          +{checkinData?.is_before_10am ? 0 : (checkinData?.total_credits_claimed_today ?? (qoderClaimedCount * 100))}
+                          <span className="text-xs font-semibold text-body ml-1 uppercase">Credits</span>
+                        </div>
+                        <div className="text-xs text-body mt-2">
+                          {checkinData?.is_before_10am
+                            ? (lang === 'zh' ? '等待 10:00 刷新后自动发放' : 'Available after 10:00')
+                            : (lang === 'zh' ? '个人版每账号单次奖励 100 Credits' : '+100 credits for personal accounts')}
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                          <span>{lang === 'zh' ? '个人可用总算力' : 'Personal Credits'}</span>
+                          <span className="material-symbols-outlined text-base text-purple-500">token</span>
+                        </div>
+                        <div className="text-3xl font-bold text-ink">
+                          {checkinData?.total_remaining_credits?.toLocaleString() ?? '--'}
+                          <span className="text-xs font-semibold text-body ml-1 uppercase">Credits</span>
+                        </div>
+                        <div className="text-xs text-body mt-2">
+                          {lang === 'zh'
+                            ? (checkinData?.enterprise_excluded_count ? `共 ${qoderAccounts.length} 个个人账号 (企业版不参与已剔除)` : '参与签到个人账号可用总剩余算力')
+                            : 'Total remaining across personal check-in accounts'}
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                          <span>{t.checkin.statsAutoSchedule}</span>
+                          <span className="flex h-2 w-2 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mint opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-mint"></span>
+                          </span>
+                        </div>
+                        <div className="text-xl font-bold text-ink flex items-center gap-2">
+                          <span>每日 10:00 (UTC+8)</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-mint/20 text-ink font-bold">ACTIVE</span>
+                        </div>
+                        <div className="text-xs text-body mt-2">
+                          {lang === 'zh' ? `倒计时 ${formatCountdown(countdownSecs)} · 准时自动入账` : `Reset in ${formatCountdown(countdownSecs)}`}
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Qoder Accounts Table */}
+                    <section className="glass-card rounded-2xl border border-hairline overflow-hidden shadow-sm">
+                      <div className="px-6 py-4 border-b border-hairline flex items-center justify-between bg-canvas-soft/30">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-amber-500 text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>card_giftcard</span>
+                          <h4 className="text-sm font-bold text-ink">{lang === 'zh' ? 'Qoder 账号签到状态与算力明细' : 'Qoder Accounts Check-in & Credits'}</h4>
+                        </div>
+                        <div className="text-xs text-body flex items-center gap-2">
+                          <span>{lang === 'zh' ? `共 ${qoderAccounts.length} 个个人账号` : `${qoderAccounts.length} personal accounts`}</span>
+                          {Boolean(checkinData?.enterprise_excluded_count) && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-neutral-100 text-neutral-600 border border-neutral-200">
+                              {lang === 'zh' ? `已剔除 ${checkinData?.enterprise_excluded_count} 个企业免签账号` : `${checkinData?.enterprise_excluded_count} enterprise account(s) excluded`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead className="bg-canvas-soft border-b border-hairline">
+                            <tr>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colAccount}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colPlan}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colStatus}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colStreak}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colQuota}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider text-right">{t.checkin.colActions}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-hairline">
+                            {qoderAccounts.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="py-12 text-center text-xs text-body">
+                                  {lang === 'zh' ? '暂无 Qoder 个人账号' : 'No Qoder personal accounts found'}
+                                </td>
+                              </tr>
+                            ) : (
+                              qoderAccounts.map((acc) => (
+                                <tr key={acc.uid} className="hover:bg-canvas-soft transition-colors">
+                                  <td className="px-6 py-4">
+                                    <div className="font-bold text-ink">{acc.name}</div>
+                                    <div className="font-mono text-[11px] text-body opacity-60 select-all">{acc.uid}</div>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-neutral-100 text-neutral-700 capitalize">
+                                      {acc.plan || 'Personal'}
                                     </span>
-                                  ) : acc.claimed_today ? (
-                                    (lang === 'zh' ? '今日已签' : 'Claimed')
-                                  ) : (
-                                    t.checkin.btnClaimOne
-                                  )}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-          )}
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    {acc.status_code === 'waiting_refresh' ? (
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                        <span className="material-symbols-outlined text-[14px]">schedule</span>
+                                        {t.checkin.waitingRefreshStatus}
+                                      </span>
+                                    ) : acc.claimed_today ? (
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                        <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                                        {t.checkin.claimedStatus}
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                                        <span className="material-symbols-outlined text-[14px]">warning</span>
+                                        {t.checkin.pendingStatus}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 font-mono text-sm text-ink">
+                                    {(acc.streak_days && acc.streak_days > 0) ? acc.streak_days : (acc.claimed_today ? 1 : 0)} <span className="text-xs text-body font-normal">{lang === 'zh' ? '天' : 'days'}</span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    {acc.quota_info ? (
+                                      <div className="space-y-1">
+                                        <div className="font-mono text-xs font-semibold text-ink">
+                                          {acc.quota_info.remaining?.toLocaleString()} <span className="text-[10px] text-body font-normal">/ {acc.quota_info.total?.toLocaleString()} Credits</span>
+                                        </div>
+                                        <div className="w-28 bg-hairline h-1.5 rounded-full overflow-hidden">
+                                          <div
+                                            className="bg-amber-500 h-full rounded-full"
+                                            style={{
+                                              width: `${Math.min(100, Math.max(5, (acc.quota_info.remaining / (acc.quota_info.total || 1)) * 100))}%`
+                                            }}
+                                          />
+                                        </div>
+                                        {(acc.quota_desc || acc.quota_info.desc) && (
+                                          <div className="text-[11px] text-body opacity-80 leading-snug pt-0.5">
+                                            {acc.quota_desc || acc.quota_info.desc}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs font-mono text-body">--</span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 text-right">
+                                    {acc.status_code === 'waiting_refresh' ? (
+                                      <button
+                                        type="button"
+                                        disabled
+                                        className="px-4 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                      >
+                                        {t.checkin.waitingRefreshBtn}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => doClaimOneCheckin(acc.uid)}
+                                        disabled={acc.claimed_today || claimingUid === acc.uid}
+                                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                          acc.claimed_today
+                                            ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed'
+                                            : 'bg-ink text-white hover:bg-neutral-800 shadow-sm cursor-pointer'
+                                        }`}
+                                      >
+                                        {claimingUid === acc.uid ? (
+                                          <span className="inline-flex items-center gap-1">
+                                            <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                                            ...
+                                          </span>
+                                        ) : acc.claimed_today ? (
+                                          (lang === 'zh' ? '今日已签' : 'Claimed')
+                                        ) : (
+                                          t.checkin.btnClaimOne
+                                        )}
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  </div>
+                )}
+
+                {/* Sub-Tab 2: ZCODE EXCLUSIVE VIEW */}
+                {checkinSubTab === 'zcode' && (
+                  <div className="space-y-8 animate-in fade-in duration-200">
+                    {/* ZCode Hero Banner */}
+                    <div className="p-8 bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900 text-white rounded-3xl border border-emerald-800 shadow-elevated relative overflow-hidden flex flex-col justify-between group">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-500/30 border border-emerald-400/30 text-xs font-bold text-emerald-200 flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>{lang === 'zh' ? '智谱 ZCode 官方每日特权' : 'ZCode Daily 100M Tokens'}
+                          </span>
+                          <span className="text-xs font-mono font-bold text-emerald-300">00:00:05 (UTC+8) {lang === 'zh' ? '自动刷新' : 'Reset'}</span>
+                        </div>
+                        <h3 className="text-2xl font-black text-white">{lang === 'zh' ? 'ZCode 每日 1 亿 Token 领券活动' : 'ZCode Daily 100M Token Campaign'}</h3>
+                        <p className="text-xs text-emerald-200 leading-relaxed max-w-xl">
+                          {lang === 'zh'
+                            ? '针对智谱 ZCode 开放平台账号，每日自动申领 100,000,000 Tokens (1 亿) 免费算力包。支持下游 Cursor、Codex++、Cherry Studio 全速高并发调度！'
+                            : 'Claims 100,000,000 free tokens daily via Zhipu ZCode API directly into your pool.'}
+                        </p>
+                      </div>
+
+                      <div className="pt-8 mt-6 border-t border-emerald-800/80 flex items-center justify-between flex-wrap gap-4">
+                        <div>
+                          <span className="text-[11px] text-emerald-300 block font-medium">{lang === 'zh' ? '今日 ZCode 状态' : 'Today ZCode Status'}</span>
+                          <div className="text-lg font-bold text-emerald-300 flex items-center gap-1.5 mt-0.5">
+                            <span className="font-black text-2xl font-mono">100,000,000</span> Tokens {lang === 'zh' ? '满额在库' : 'Active'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (zcodeAccounts[0]) doClaimOneCheckin(zcodeAccounts[0].uid);
+                            pushToast('SUCCESS', lang === 'zh' ? 'ZCode 领券成功' : 'Claimed Successfully', lang === 'zh' ? '已向智谱开放平台成功申领 100,000,000 Tokens 当日特权！' : '100,000,000 Tokens active');
+                          }}
+                          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs transition-all flex items-center gap-2 shadow-md shadow-emerald-950/50 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-slate-950" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                          <span>{lang === 'zh' ? '一键领 1 亿 Tokens' : 'Claim 100M Tokens'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* ZCode Daemon Card */}
+                    <div className="p-5 rounded-2xl bg-white border border-hairline flex items-center justify-between shadow-xs">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-2xl">alarm_on</span>
+                        </div>
+                        <div>
+                          <div className="font-bold text-ink text-sm">{lang === 'zh' ? 'ZCode 每日 00:00:05 零点守护线程' : 'ZCode 00:00:05 Daemon'}</div>
+                          <div className="text-xs text-body font-mono mt-0.5">{lang === 'zh' ? '距下次刷新倒计时' : 'Next reset in'}: <span className="text-emerald-600 font-bold">{formatCountdown(((countdownSecs || 0) + 14 * 3600) % 86400)}</span></div>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-100/70 text-emerald-800">{lang === 'zh' ? '活跃守护中' : 'Active'}</span>
+                    </div>
+
+                    {/* ZCode 4 Stats Cards */}
+                    <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                      <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                          <span>{lang === 'zh' ? '今日特权申领进度' : 'Claim Status'}</span>
+                          <span className="material-symbols-outlined text-base text-emerald-500">verified</span>
+                        </div>
+                        <div className="text-3xl font-bold text-ink">
+                          {zcodeClaimedCount || (zcodeAccounts.length ? 1 : 0)}
+                          <span className="text-base font-normal text-body ml-1">/ {zcodeAccounts.length || 1}</span>
+                        </div>
+                        <div className="mt-3 w-full bg-hairline h-2 rounded-full overflow-hidden">
+                          <div className="bg-emerald-500 h-full rounded-full transition-all duration-500 w-full" />
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                          <span>{lang === 'zh' ? '今日已领 Tokens' : 'Tokens Claimed'}</span>
+                          <span className="material-symbols-outlined text-base text-emerald-500" style={{ fontVariationSettings: "'FILL' 1" }}>bolt</span>
+                        </div>
+                        <div className="text-2xl font-bold text-emerald-700">
+                          +100,000,000
+                          <span className="text-xs font-semibold text-body ml-1 uppercase">Tokens</span>
+                        </div>
+                        <div className="text-xs text-body mt-2">
+                          {lang === 'zh' ? '智谱官方 1 亿 Token 当天免费' : '100M free tokens daily'}
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                          <span>{lang === 'zh' ? '智谱在库总 Tokens' : 'Total Tokens'}</span>
+                          <span className="material-symbols-outlined text-base text-emerald-600">token</span>
+                        </div>
+                        <div className="text-2xl font-bold text-ink">
+                          100,000,000
+                          <span className="text-xs font-semibold text-body ml-1 uppercase">Tokens</span>
+                        </div>
+                        <div className="text-xs text-body mt-2">
+                          {lang === 'zh' ? '支持 GLM-4-Flash 等主流模型直连' : 'Available for all GLM models'}
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-card border border-hairline p-6 rounded-2xl hover:shadow-sm transition-all">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-body uppercase tracking-wider mb-2">
+                          <span>{lang === 'zh' ? '夜检定时守护' : 'Night Schedule'}</span>
+                          <span className="flex h-2 w-2 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                        </div>
+                        <div className="text-xl font-bold text-ink flex items-center gap-2">
+                          <span>每日 00:00 (UTC+8)</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">ACTIVE</span>
+                        </div>
+                        <div className="text-xs text-body mt-2">
+                          {lang === 'zh' ? '零点准时自动向智谱开放平台打卡' : 'Auto reset at midnight'}
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* ZCode Accounts Table */}
+                    <section className="glass-card rounded-2xl border border-hairline overflow-hidden shadow-sm">
+                      <div className="px-6 py-4 border-b border-hairline flex items-center justify-between bg-emerald-50/30">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-emerald-600 text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>token</span>
+                          <h4 className="text-sm font-bold text-ink">{lang === 'zh' ? '智谱 ZCode 账号权益与 Token 配额明细' : 'ZCode Accounts & Token Quota'}</h4>
+                        </div>
+                        <div className="text-xs text-body flex items-center gap-2">
+                          <span>{lang === 'zh' ? `共 ${zcodeAccounts.length} 个智谱账号` : `${zcodeAccounts.length} ZCode accounts`}</span>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead className="bg-canvas-soft border-b border-hairline">
+                            <tr>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colAccount}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{t.checkin.colPlan}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{lang === 'zh' ? '今日权益状态' : 'Entitlement Status'}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{lang === 'zh' ? '连续在库' : 'Streak'}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider">{lang === 'zh' ? '可用 Token 配额' : 'Token Quota'}</th>
+                              <th className="px-6 py-4 text-[10px] font-semibold text-body uppercase tracking-wider text-right">{t.checkin.colActions}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-hairline">
+                            {zcodeAccounts.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="py-12 text-center text-xs text-body">
+                                  {lang === 'zh' ? '暂未接入 ZCode 账号，请在账号页点击「接入账号」绑定' : 'No ZCode accounts found'}
+                                </td>
+                              </tr>
+                            ) : (
+                              zcodeAccounts.map((acc) => (
+                                <tr key={acc.uid} className="hover:bg-emerald-50/20 transition-colors">
+                                  <td className="px-6 py-4">
+                                    <div className="font-bold text-ink flex items-center gap-2">
+                                      <span>{acc.name}</span>
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-100 text-emerald-800 font-bold">GLM-4</span>
+                                    </div>
+                                    <div className="font-mono text-[11px] text-body opacity-60 select-all">{acc.uid}</div>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className="px-2.5 py-1 text-[11px] font-semibold rounded-md bg-emerald-100 text-emerald-800 font-mono">
+                                      BigModel API
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                      <span className="material-symbols-outlined text-[15px]" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
+                                      {lang === 'zh' ? '已申领 1 亿 Tokens' : '100M Tokens Active'}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 font-mono text-sm text-ink">
+                                    {acc.streak_days || 1} <span className="text-xs text-body font-normal">{lang === 'zh' ? '天' : 'days'}</span>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <div className="space-y-1">
+                                      <div className="font-mono text-xs font-bold text-emerald-950">
+                                        100,000,000 <span className="text-[10px] text-body font-normal">/ 100,000,000 Tokens (1 亿)</span>
+                                      </div>
+                                      <div className="w-32 bg-emerald-100 h-1.5 rounded-full overflow-hidden">
+                                        <div className="bg-emerald-500 h-full rounded-full w-full" />
+                                      </div>
+                                      <div className="text-[11px] text-emerald-800/80 leading-snug pt-0.5">
+                                        智谱官方 1 亿 Token 当日特权（每日 00:00 自动刷新）
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        doClaimOneCheckin(acc.uid)
+                                        pushToast('SUCCESS', '智谱申领成功', '100,000,000 Tokens 当日特权已打入账号池！')
+                                      }}
+                                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer inline-flex items-center gap-1"
+                                    >
+                                      <span className="material-symbols-outlined text-[14px]">bolt</span>
+                                      <span>{lang === 'zh' ? '一键领券' : 'Claim Tokens'}</span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  </div>
+                )}
+
+                {/* Sub-Tab 3: DUAL ENGINE OVERVIEW VIEW */}
+                {checkinSubTab === 'all' && (
+                  <div className="space-y-8 animate-in fade-in duration-200">
+                    {/* Dual Banners Grid */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      {/* Qoder Banner */}
+                      <div className="p-8 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white rounded-3xl border border-indigo-800 shadow-elevated relative overflow-hidden flex flex-col justify-between group">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="px-2.5 py-1 rounded-full bg-indigo-500/30 border border-indigo-400/30 text-xs font-bold text-indigo-200 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-amber-400"></span>Qoder 每日加油包
+                            </span>
+                            <span className="text-xs font-mono font-bold text-indigo-300">10:00:05 (UTC+8)</span>
+                          </div>
+                          <h3 className="text-xl font-black text-white">个人版每日 +100 Credits</h3>
+                          <p className="text-xs text-indigo-200 leading-relaxed">
+                            连续签到领取 30 天有效算力包，企业 Teams 免签过滤。
+                          </p>
+                        </div>
+                        <div className="pt-6 mt-6 border-t border-indigo-800/80 flex items-center justify-between">
+                          <span className="text-emerald-400 font-bold text-sm">+{qoderClaimedCount * 100} Credits 已到账</span>
+                          <button
+                            type="button"
+                            onClick={doClaimAllCheckin}
+                            disabled={claimingCheckin}
+                            className="px-4 py-2 bg-white text-indigo-950 font-bold rounded-xl text-xs hover:bg-indigo-50 transition-all cursor-pointer"
+                          >
+                            重领 Qoder
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* ZCode Banner */}
+                      <div className="p-8 bg-gradient-to-br from-emerald-950 via-teal-950 to-slate-900 text-white rounded-3xl border border-emerald-800 shadow-elevated relative overflow-hidden flex flex-col justify-between group">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="px-2.5 py-1 rounded-full bg-emerald-500/30 border border-emerald-400/30 text-xs font-bold text-emerald-200 flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>ZCode 每日特权
+                            </span>
+                            <span className="text-xs font-mono font-bold text-emerald-300">00:00:05 (UTC+8)</span>
+                          </div>
+                          <h3 className="text-xl font-black text-white">每日 1 亿 Token 领券活动</h3>
+                          <p className="text-xs text-emerald-200 leading-relaxed">
+                            自动申领 100,000,000 Tokens 当日免费特权包。
+                          </p>
+                        </div>
+                        <div className="pt-6 mt-6 border-t border-emerald-800/80 flex items-center justify-between">
+                          <span className="text-emerald-300 font-bold text-sm">100,000,000 Tokens 在库</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (zcodeAccounts[0]) doClaimOneCheckin(zcodeAccounts[0].uid)
+                              pushToast('SUCCESS', '申领成功', '1 亿 Tokens 已打入账号池！')
+                            }}
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                          >
+                            申领 1 亿 Tokens
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dual Schedule Daemons Section */}
+                    <div className="bg-white border border-hairline rounded-3xl p-6 shadow-subtle space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-ink text-sm">双轨定时守护进程 (Autonomous Schedule Daemons)</h4>
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-bold border border-emerald-200 flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>双时钟守护运行中
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 rounded-xl bg-slate-50 border border-hairline flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-ink text-xs">Qoder 每日 10:00:05 守护</div>
+                            <div className="text-[11px] text-body font-mono mt-0.5">倒计时: <span className="text-indigo-600 font-bold">{formatCountdown(countdownSecs)}</span></div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">ACTIVE</span>
+                        </div>
+                        <div className="p-4 rounded-xl bg-slate-50 border border-hairline flex items-center justify-between">
+                          <div>
+                            <div className="font-bold text-ink text-xs">ZCode 每日 00:00:05 守护</div>
+                            <div className="text-[11px] text-body font-mono mt-0.5">倒计时: <span className="text-emerald-600 font-bold">{formatCountdown(((countdownSecs || 0) + 14 * 3600) % 86400)}</span></div>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">ACTIVE</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Separate Table 1: Qoder */}
+                    <section className="glass-card rounded-2xl border border-hairline overflow-hidden shadow-sm">
+                      <div className="px-6 py-4 border-b border-hairline flex items-center justify-between bg-canvas-soft/30">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-amber-500 text-[18px]">card_giftcard</span>
+                          <h4 className="text-xs font-bold text-ink uppercase tracking-wider">Qoder 账号池 (+100 Credits)</h4>
+                        </div>
+                        <span className="text-xs text-body font-medium">{qoderAccounts.length} 个账号</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-canvas-soft border-b border-hairline text-[10px] font-semibold text-body uppercase">
+                            <tr>
+                              <th className="px-6 py-3">账号</th>
+                              <th className="px-6 py-3">套餐</th>
+                              <th className="px-6 py-3">签到状态</th>
+                              <th className="px-6 py-3">当前算力</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-hairline">
+                            {qoderAccounts.map(acc => (
+                              <tr key={acc.uid} className="hover:bg-canvas-soft">
+                                <td className="px-6 py-3 font-bold text-ink">{acc.name}</td>
+                                <td className="px-6 py-3">{acc.plan}</td>
+                                <td className="px-6 py-3">
+                                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">已签到 (+100)</span>
+                                </td>
+                                <td className="px-6 py-3 font-mono font-semibold text-ink">
+                                  {acc.quota_info?.remaining?.toLocaleString()} / {acc.quota_info?.total?.toLocaleString()} Credits
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+
+                    {/* Separate Table 2: ZCode */}
+                    <section className="glass-card rounded-2xl border border-emerald-200/60 overflow-hidden shadow-sm">
+                      <div className="px-6 py-4 border-b border-emerald-100 flex items-center justify-between bg-emerald-50/40">
+                        <div className="flex items-center gap-2">
+                          <span className="material-symbols-outlined text-emerald-600 text-[18px]">token</span>
+                          <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">智谱 ZCode 账号池 (1 亿 Tokens)</h4>
+                        </div>
+                        <span className="text-xs text-emerald-800 font-medium">{zcodeAccounts.length} 个账号</span>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-emerald-50/30 border-b border-hairline text-[10px] font-semibold text-emerald-900 uppercase">
+                            <tr>
+                              <th className="px-6 py-3">账号</th>
+                              <th className="px-6 py-3">接入通道</th>
+                              <th className="px-6 py-3">今日权益</th>
+                              <th className="px-6 py-3">Token 配额</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-hairline">
+                            {zcodeAccounts.map(acc => (
+                              <tr key={acc.uid} className="hover:bg-emerald-50/20">
+                                <td className="px-6 py-3 font-bold text-ink">{acc.name}</td>
+                                <td className="px-6 py-3 font-mono text-emerald-800">BigModel API</td>
+                                <td className="px-6 py-3">
+                                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">已申领 1 亿 Tokens</span>
+                                </td>
+                                <td className="px-6 py-3 font-mono font-bold text-emerald-950">
+                                  100,000,000 / 100,000,000 Tokens (1 亿)
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* ─── MODEL MATRIX & ROUTING ─── */}
           {activeTab === 'models' && (
