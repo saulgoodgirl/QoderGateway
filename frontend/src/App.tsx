@@ -90,8 +90,8 @@ const NAV_GROUPS: NavGroupDef[] = [
     groupEn: 'Core Gateway',
     items: [
       { id: 'dashboard', icon: 'grid_view', labelZh: '系统总览', labelEn: 'Dashboard' },
-      { id: 'accounts', icon: 'group', labelZh: '双平台账号池', labelEn: 'Account Pool' },
-      { id: 'checkin', icon: 'card_giftcard', labelZh: '自动签到 · 领算力', labelEn: 'Daily Rewards' },
+      { id: 'accounts', icon: 'group', labelZh: '账号池集群', labelEn: 'Account Pool' },
+      { id: 'checkin', icon: 'card_giftcard', labelZh: '每日签到', labelEn: 'Daily Rewards', badgeZh: '+100', badgeEn: '+100' },
       { id: 'models', icon: 'psychology', labelZh: '模型矩阵 & 路由', labelEn: 'Models & Routing', badgeZh: '18 款', badgeEn: '18 Models' },
     ],
   },
@@ -99,9 +99,9 @@ const NAV_GROUPS: NavGroupDef[] = [
     groupZh: '对外服务与安全',
     groupEn: 'Services & Security',
     items: [
-      { id: 'api-keys', icon: 'key', labelZh: 'API Key & 子池绑定', labelEn: 'API Keys & Pools' },
-      { id: 'playground', icon: 'chat', labelZh: '在线调试 Playground', labelEn: 'Playground' },
-      { id: 'logs', icon: 'terminal', labelZh: '服务分流日志', labelEn: 'Service Logs' },
+      { id: 'api-keys', icon: 'key', labelZh: 'API Key & 绑定', labelEn: 'API Keys & Pools' },
+      { id: 'playground', icon: 'chat', labelZh: '在线调试', labelEn: 'Playground' },
+      { id: 'logs', icon: 'terminal', labelZh: '服务运行日志', labelEn: 'Service Logs' },
     ],
   },
 ]
@@ -189,13 +189,13 @@ const UI_TEXT = {
   },
   zh: {
     nav: {
-      dashboard: '系统总览', accounts: '双平台账号池', checkin: '自动签到 · 领算力', models: '模型矩阵 & 路由', playground: '在线调试 Playground', apiKeys: 'API Key & 子池绑定', logs: '服务分流日志',
+      dashboard: '系统总览', accounts: '账号池集群', checkin: '每日签到', models: '模型矩阵 & 路由', playground: '在线调试', apiKeys: 'API Key & 绑定', logs: '服务运行日志',
     },
     breadcrumb: {
       dashboard: '控制台 / 概览', accounts: '控制台 / 账号管理', checkin: '权益中心 / 每日签到', models: '控制台 / 模型矩阵', playground: '调试 / 对话测试', apiKeys: '管理 / 安全', logs: '系统 / 日志', docs: '开发者平台 / 文档',
     },
     title: {
-      dashboard: '双引擎聚合网关总览', accounts: '双平台账号管理中枢', checkin: '双轨自动打卡与 1 亿 Token 领券', models: '已实测验证模型矩阵 (18 款全量支持)', playground: '在线调试 Playground', apiKeys: 'API Key 授权与子池管理', logs: '服务分流日志监控', docs: '文档',
+      dashboard: '聚合网关总览', accounts: '账号池管理中枢', checkin: '每日签到 · 领算力', models: '模型矩阵与路由', playground: '在线调试演练场', apiKeys: 'API Key 授权与子池管理', logs: '服务运行日志监控', docs: '文档',
     },
     common: { docs: '文档', support: '支持', healthy: '正常', offline: '未就绪', signOut: '退出', refresh: '刷新', add: '添加', delete: '删除', copy: '复制' },
     dashboard: {
@@ -1259,24 +1259,24 @@ export default function App() {
   const { bc, title } = pageMeta[activeTab]
 
   return (
-    <div className="bg-surface min-h-screen relative">
+    <div className="bg-surface min-h-screen relative overflow-x-hidden max-w-full w-full">
       <div ref={el => { orbRefs.current[2] = el }} className="orb bg-mint w-[500px] h-[500px] -top-24 -right-24"></div>
       <div ref={el => { orbRefs.current[3] = el }} className="orb bg-peach w-[400px] h-[400px] bottom-0 left-[20%]"></div>
 
-      <aside ref={sidebarRef} className="fixed left-0 top-0 h-screen w-[280px] bg-white/95 border-r border-hairline flex flex-col z-50 select-none backdrop-blur-md">
+      <aside ref={sidebarRef} className="fixed left-0 top-0 h-screen w-[260px] bg-white/95 border-r border-hairline flex flex-col z-50 select-none backdrop-blur-md">
         {/* Brand: GITIT with Dual Subtitle */}
-        <div className="p-6 border-b border-hairline/80">
+        <div className="p-5 border-b border-hairline/80">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-            <div className="relative w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-500 flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
-              <span className="material-symbols-outlined text-white text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
-              <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
+            <div className="relative w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-500 flex items-center justify-center shadow-md shadow-indigo-200 shrink-0">
+              <span className="material-symbols-outlined text-white text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>hub</span>
+              <span className="absolute -bottom-1 -right-1 flex h-3 w-3">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white"></span>
               </span>
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <h1 className="font-black text-2xl tracking-tight bg-gradient-to-r from-indigo-700 via-slate-800 to-emerald-700 bg-clip-text text-transparent">
+                <h1 className="font-black text-xl tracking-tight bg-gradient-to-r from-indigo-700 via-slate-800 to-emerald-700 bg-clip-text text-transparent">
                   GITIT
                 </h1>
               </div>
@@ -1290,8 +1290,8 @@ export default function App() {
           </div>
         </div>
 
-        {/* Navigation Groups with Dual-State Icons */}
-        <nav className="flex-1 p-4 space-y-4 overflow-y-auto">
+        {/* Navigation Groups with Dual-State Icons & Spacious Padding */}
+        <nav className="flex-1 px-3 py-3 space-y-3 overflow-y-auto">
           {NAV_GROUPS.map((group, gIdx) => (
             <div key={gIdx} className="space-y-1">
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 pt-1 pb-1">
@@ -1303,14 +1303,14 @@ export default function App() {
                   <button
                     key={item.id}
                     onClick={() => setActiveTab(item.id)}
-                    className={`nav-item flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl transition-all w-full text-left cursor-pointer ${
+                    className={`nav-item flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all w-full text-left cursor-pointer ${
                       isActive
                         ? 'active bg-slate-100 text-ink font-bold shadow-xs'
                         : 'text-body font-medium hover:bg-slate-100/70 hover:text-ink'
                     }`}
                   >
                     <span
-                      className="material-symbols-outlined text-[22px]"
+                      className="material-symbols-outlined text-[20px] shrink-0"
                       style={{
                         fontVariationSettings: isActive ? "'FILL' 1, 'wght' 500" : "'FILL' 0, 'wght' 350",
                         color: isActive ? '#0f172a' : undefined,
@@ -1318,20 +1318,19 @@ export default function App() {
                     >
                       {item.icon}
                     </span>
-                    <span className="text-sm">{lang === 'zh' ? item.labelZh : item.labelEn}</span>
+                    <span className="text-[13px] font-medium whitespace-nowrap truncate shrink-0">{lang === 'zh' ? item.labelZh : item.labelEn}</span>
                     {item.id === 'accounts' && (
-                      <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-slate-100 text-body font-mono">
+                      <span className="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-body font-mono shrink-0">
                         {accountsConfig.accounts.length} {lang === 'zh' ? '账号' : 'Acc'}
                       </span>
                     )}
                     {item.id === 'checkin' && (
-                      <span className="ml-auto flex items-center gap-1">
-                        <span className="px-1.5 py-0.5 text-[9px] font-black bg-amber-500 text-white rounded shadow-sm">+100</span>
-                        <span className="px-1.5 py-0.5 text-[9px] font-black bg-emerald-600 text-white rounded shadow-sm">1亿</span>
+                      <span className="ml-auto px-1.5 py-0.5 text-[9px] font-bold bg-amber-500 text-white rounded leading-none shrink-0 shadow-xs">
+                        +100
                       </span>
                     )}
                     {item.badgeZh && item.id === 'models' && (
-                      <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md">
+                      <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-md shrink-0">
                         {lang === 'zh' ? item.badgeZh : item.badgeEn}
                       </span>
                     )}
@@ -1366,61 +1365,61 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="ml-[280px] min-h-screen flex flex-col relative z-10">
-        <header className="flex justify-between items-center h-20 px-8 w-full border-b border-hairline/80 bg-white/80 sticky top-0 z-40 backdrop-blur-md">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-body font-semibold">
-              <span>{bc}</span>
-            </div>
-            <h2 className="font-display-md text-ink text-xl font-black mt-0.5">{title}</h2>
+      <main className="ml-[260px] min-h-screen flex flex-col relative z-10 min-w-0 max-w-full overflow-x-hidden">
+        <header className="flex justify-between items-center h-16 px-6 sm:px-8 w-full border-b border-hairline/80 bg-white/80 sticky top-0 z-40 backdrop-blur-md min-w-0">
+          <div className="shrink-0 mr-4">
+            <div className="flex items-center gap-2 text-[10px] text-body font-semibold uppercase tracking-wider">{bc}</div>
+            <h2 className="font-display-md text-ink text-base sm:text-lg font-black mt-0.5 whitespace-nowrap tracking-tight">{title}</h2>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center bg-slate-100/80 p-1 rounded-xl border border-hairline text-xs font-semibold">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="hidden xl:flex items-center bg-slate-100 p-0.5 rounded-lg border border-hairline text-xs font-semibold shrink-0">
               <button
                 onClick={() => setProviderFilter('all')}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${providerFilter === 'all' ? 'bg-white shadow-subtle text-ink font-bold' : 'text-body hover:text-ink'}`}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${providerFilter === 'all' ? 'bg-white shadow-subtle text-ink font-bold' : 'text-body hover:text-ink'}`}
               >
-                {lang === 'zh' ? '全部引擎' : 'All Engines'}
+                {lang === 'zh' ? '全部' : 'All'}
               </button>
               <button
                 onClick={() => setProviderFilter('qoder')}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${providerFilter === 'qoder' ? 'bg-white shadow-subtle text-indigo-700 font-bold' : 'text-body hover:text-indigo-600'}`}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${providerFilter === 'qoder' ? 'bg-white shadow-subtle text-indigo-700 font-bold' : 'text-body hover:text-indigo-600'}`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>Qoder {lang === 'zh' ? '专区' : 'Zone'}
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>Qoder
               </button>
               <button
                 onClick={() => setProviderFilter('zcode')}
-                className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${providerFilter === 'zcode' ? 'bg-white shadow-subtle text-emerald-700 font-bold' : 'text-body hover:text-emerald-600'}`}
+                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${providerFilter === 'zcode' ? 'bg-white shadow-subtle text-emerald-700 font-bold' : 'text-body hover:text-emerald-600'}`}
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>ZCode {lang === 'zh' ? '专区' : 'Zone'}
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>ZCode
               </button>
             </div>
 
             <button
               onClick={() => { setAddAccountTab('pat'); setShowAddAccountModal(true) }}
-              className="px-3.5 py-1.5 bg-ink hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              className="px-3 py-1.5 bg-ink hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all shrink-0 cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[16px]">add_circle</span>
-              <span>{lang === 'zh' ? '接入新账号' : 'Add Account'}</span>
+              <span className="material-symbols-outlined text-[15px]">add</span>
+              <span>{lang === 'zh' ? '接入账号' : 'Add Account'}</span>
             </button>
 
-            <div
+            <button
               onClick={() => copyText('https://lite.bigbob.asia/v1', lang === 'zh' ? '已复制网关公网端点' : 'Copied Gateway URL')}
-              className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-white border border-emerald-200/60 rounded-xl text-xs font-mono text-slate-700 shadow-subtle cursor-pointer hover:bg-emerald-50/40 transition-colors"
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-lg text-xs font-mono text-slate-700 transition-colors shrink-0 cursor-pointer"
+              title="点击复制完整公网端点: https://lite.bigbob.asia/v1"
             >
-              <span className="material-symbols-outlined text-[16px] text-emerald-500">cloud_done</span>
-              <span>https://lite.bigbob.asia/v1</span>
-            </div>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="font-semibold text-slate-600">/v1</span>
+              <span className="material-symbols-outlined text-[13px] text-slate-400">content_copy</span>
+            </button>
 
-            <div className="flex items-center gap-3 text-body text-sm font-semibold pl-2 border-l border-hairline">
-              <a href="/documents" className="hover:text-ink transition-colors cursor-pointer">{t.common.docs}</a>
-              <button onClick={() => switchLang(lang === 'zh' ? 'en' : 'zh')} className="hover:text-ink transition-colors cursor-pointer">{lang === 'zh' ? 'English' : '中文'}</button>
+            <div className="flex items-center gap-1 text-xs font-semibold pl-2 border-l border-hairline shrink-0">
+              <a href="/documents" className="text-body hover:text-ink px-2 py-1 rounded transition-colors cursor-pointer">{t.common.docs}</a>
+              <button onClick={() => switchLang(lang === 'zh' ? 'en' : 'zh')} className="text-body hover:text-ink px-2 py-1 rounded transition-colors cursor-pointer font-bold">{lang === 'zh' ? 'EN' : '中文'}</button>
+              <button onClick={handleLogout} className="text-rose-600 hover:bg-rose-50 px-2 py-1 rounded transition-colors font-bold cursor-pointer">{t.common.signOut}</button>
             </div>
-            <button onClick={handleLogout} className="text-xs font-bold text-body hover:text-red-600 transition-colors px-2 py-1 rounded hover:bg-red-50">{t.common.signOut}</button>
           </div>
         </header>
 
-        <div ref={contentBodyRef} className="flex-1 p-8 w-full">
+        <div ref={contentBodyRef} className="flex-1 p-6 sm:p-8 max-w-7xl w-full mx-auto space-y-8 min-w-0">
           {/* ─── DASHBOARD ─── */}
           {activeTab === 'dashboard' && (
             <div className="space-y-8">
@@ -2274,13 +2273,13 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-12 gap-8">
-                <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
-                  <div className="glass-card p-8 rounded-2xl flex flex-col justify-between min-h-[220px]">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                <div className="col-span-1 xl:col-span-4 flex flex-col gap-6">
+                  <div className="glass-card p-6 sm:p-8 rounded-2xl flex flex-col justify-between min-h-[220px]">
                     <div><h3 className="font-bold text-ink text-lg mb-2">{t.api.gatewayAuth}</h3><p className="text-body text-sm">{t.api.gatewayAuthDesc}</p></div>
                     <div className="flex items-center justify-between pt-6 border-t border-hairline mt-auto">
                       <span className="text-[10px] font-bold text-body uppercase tracking-widest">{t.api.systemStatus}</span>
-                      <button className={`w-11 h-6 rounded-full p-0.5 transition-colors relative ${apiConfig.auth_required ? 'bg-ink' : 'bg-hairline-strong'}`} onClick={handleToggleAuth}>
+                      <button className={`w-11 h-6 rounded-full p-0.5 transition-colors relative cursor-pointer ${apiConfig.auth_required ? 'bg-ink' : 'bg-hairline-strong'}`} onClick={handleToggleAuth}>
                         <div className={`w-5 h-5 bg-white rounded-full transition-transform duration-200 ${apiConfig.auth_required ? 'translate-x-5' : 'translate-x-0'}`}></div>
                       </button>
                     </div>
@@ -2290,18 +2289,18 @@ export default function App() {
                     <div className="mt-2 flex items-baseline gap-2"><span className="font-display-sm text-ink">{apiConfig.allowed_keys.length}</span><span className="text-[10px] text-body font-bold">{t.api.configured}</span></div>
                   </div>
                 </div>
-                <div className="col-span-12 lg:col-span-8 glass-card rounded-2xl overflow-hidden flex flex-col shadow-sm">
-                  <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-hairline">
+                <div className="col-span-1 xl:col-span-8 glass-card rounded-2xl overflow-hidden flex flex-col shadow-sm">
+                  <div className="p-6 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 border-b border-hairline">
                     <div>
                       <span className="font-bold text-ink">{t.api.activeAccessKeys}</span>
-                      <p className="text-[11px] text-body">{lang === 'zh' ? '可为单个 Key 绑定专属账号，或保持默认全账号轮询。' : 'Keys can be bound to a single account or load-balanced across all.'}</p>
+                      <p className="text-[11px] text-body mt-0.5">{lang === 'zh' ? '可为单个 Key 绑定专属账号，或保持默认全账号轮询。' : 'Keys can be bound to a single account or load-balanced across all.'}</p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                      <CustomInput value={newKey} onChange={setNewKey} placeholder={t.api.keyPlaceholder} className="!w-48 !py-2 !bg-canvas-soft !border-hairline" mono />
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full xl:w-auto">
+                      <CustomInput value={newKey} onChange={setNewKey} placeholder={t.api.keyPlaceholder} className="!w-44 !py-1.5 !bg-canvas-soft !border-hairline text-xs" mono />
                       <select
                         value={newKeyAccount}
                         onChange={(e) => setNewKeyAccount(e.target.value)}
-                        className="text-xs font-semibold px-2.5 py-2 rounded-xl border border-hairline bg-canvas-soft text-ink outline-none cursor-pointer"
+                        className="text-xs font-semibold px-2.5 py-1.5 rounded-xl border border-hairline bg-canvas-soft text-ink outline-none cursor-pointer max-w-[200px]"
                         title={lang === 'zh' ? '选择该 Key 绑定的目标账号' : 'Select target account for this key'}
                       >
                         <option value="">{lang === 'zh' ? '🌐 全部账号 (默认)' : '🌐 All Accounts'}</option>
@@ -2311,7 +2310,7 @@ export default function App() {
                           </option>
                         ))}
                       </select>
-                      <button onClick={handleAddKey} disabled={!newKey.trim()} className="bg-ink text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-neutral-800 transition-all disabled:opacity-50 shrink-0">{t.common.add}</button>
+                      <button onClick={handleAddKey} disabled={!newKey.trim()} className="bg-ink text-white px-3.5 py-1.5 rounded-lg font-bold text-xs hover:bg-neutral-800 transition-all disabled:opacity-50 shrink-0 cursor-pointer">{t.common.add}</button>
                     </div>
                   </div>
                   <div className="overflow-x-auto">
