@@ -1690,14 +1690,7 @@ export default function App() {
                   <button onClick={handleRefreshStatus} className="flex items-center gap-2 px-4 py-2.5 text-body hover:text-ink transition-colors font-bold text-sm">
                     <span className="material-symbols-outlined text-[18px]">refresh</span>{t.accounts.refreshStatus}
                   </button>
-                  <button
-                    onClick={() => openAddAccountModal('pat', 'oauth')}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg hover:brightness-110 transition-all font-bold text-sm shadow-md cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">lock_open</span>
-                    {lang === 'zh' ? 'Qoder 免密授权' : 'Qoder OAuth'}
-                  </button>
-                  <button onClick={() => openAddAccountModal('pat', 'oauth')} className="flex items-center gap-2 px-6 py-2.5 bg-ink text-white rounded-lg hover:bg-neutral-800 transition-all font-bold text-sm shadow-md cursor-pointer">
+                  <button onClick={() => openAddAccountModal('pat', 'oauth')} className="flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all font-bold text-sm border text-body hover:text-ink border-hairline cursor-pointer">
                     <span className="material-symbols-outlined text-[18px]">add</span>{lang === 'zh' ? '添加账号' : 'Add Account'}
                   </button>
                 </div>
@@ -1776,7 +1769,6 @@ export default function App() {
                     { id: 'all', label: lang === 'zh' ? '全部厂商' : 'All Providers', count: accountsConfig.accounts.length },
                     { id: 'qoder', label: 'Qoder', count: accountsConfig.accounts.filter(a => (a.provider || 'qoder') === 'qoder').length },
                     { id: 'zcode', label: 'ZCode (智谱)', count: accountsConfig.accounts.filter(a => a.provider === 'zcode').length },
-                    { id: 'custom', label: lang === 'zh' ? '自定义' : 'Custom', count: accountsConfig.accounts.filter(a => a.provider === 'custom').length },
                   ].map(p => (
                     <button
                       key={p.id}
@@ -3347,7 +3339,7 @@ export default function App() {
             <div className="flex items-center justify-between px-6 py-5 border-b border-hairline">
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-ink text-[22px]">hub</span>
-                <h3 className="font-bold text-base text-ink">{lang === 'zh' ? '接入模型厂商与账号' : 'Add Model Provider & Account'}</h3>
+                <h3 className="font-bold text-base text-ink">{lang === 'zh' ? '添加账号' : 'Add Account'}</h3>
               </div>
               <button
                 type="button"
@@ -3378,27 +3370,6 @@ export default function App() {
                 className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'zcode' ? 'border-emerald-600 text-emerald-700 font-bold' : 'border-transparent text-body hover:text-ink'}`}
               >
                 ZCode (智谱)
-              </button>
-              <button
-                type="button"
-                onClick={() => { stopPollingOAuth(); setAddAccountTab('custom') }}
-                className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'custom' ? 'border-purple-600 text-purple-700 font-bold' : 'border-transparent text-body hover:text-ink'}`}
-              >
-                {lang === 'zh' ? '自定义厂商' : 'Custom Provider'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { stopPollingOAuth(); setAddAccountTab('batch') }}
-                className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'batch' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
-              >
-                {lang === 'zh' ? '批量导入' : 'Batch JSON'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { stopPollingOAuth(); setAddAccountTab('local') }}
-                className={`pb-3 transition-colors border-b-2 whitespace-nowrap cursor-pointer ${addAccountTab === 'local' ? 'border-ink text-ink font-bold' : 'border-transparent text-body hover:text-ink'}`}
-              >
-                {lang === 'zh' ? 'Qoder 本机' : 'Qoder Local'}
               </button>
             </div>
 
@@ -3731,167 +3702,6 @@ export default function App() {
                   >
                     {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
                     {lang === 'zh' ? '接入 ZCode' : 'Connect ZCode'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Tab 3: Custom Provider */}
-            {addAccountTab === 'custom' && (
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                      {lang === 'zh' ? '厂商标识 (Provider) *' : 'Provider Tag *'}
-                    </label>
-                    <input
-                      type="text"
-                      value={customProviderName}
-                      onChange={e => setCustomProviderName(e.target.value)}
-                      placeholder="deepseek / claude / openai"
-                      className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink font-mono outline-none focus:border-ink/40 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                      {lang === 'zh' ? '账号备注 (可选)' : 'Account Alias (Optional)'}
-                    </label>
-                    <input
-                      type="text"
-                      value={customAccountName}
-                      onChange={e => setCustomAccountName(e.target.value)}
-                      placeholder="e.g. My DeepSeek"
-                      className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink outline-none focus:border-ink/40 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                    {lang === 'zh' ? 'Base URL (OpenAI 兼容端点) *' : 'Base URL *'}
-                  </label>
-                  <input
-                    type="text"
-                    value={customBaseUrl}
-                    onChange={e => setCustomBaseUrl(e.target.value)}
-                    placeholder="https://api.deepseek.com/v1"
-                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                    {lang === 'zh' ? 'API Key / Bearer Token *' : 'API Key *'}
-                  </label>
-                  <input
-                    type="password"
-                    value={customApiKey}
-                    onChange={e => setCustomApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
-                  />
-                </div>
-
-                <div className="pt-2 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={closeAddAccountModal}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
-                  >
-                    {lang === 'zh' ? '取消' : 'Cancel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddCustomProvider}
-                    disabled={!customApiKey.trim() || !customBaseUrl.trim() || addingAccount}
-                    className="px-6 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2"
-                  >
-                    {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
-                    {lang === 'zh' ? '接入厂商' : 'Connect Provider'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Tab 4: Batch JSON */}
-            {addAccountTab === 'batch' && (
-              <div className="p-6 space-y-4">
-                <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-900 leading-relaxed">
-                  <p className="font-semibold mb-1">⚠️ 关于自动注册机的说明：</p>
-                  <p>自动注册机（qodergate-register）由于 GUI 依赖仅限本地独立部署与运行，云端已禁用运行接口。本地跑完注册机后导出的 accounts.json 可在此直接批量粘贴导入。</p>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                    {lang === 'zh' ? '粘贴导出的 JSON（accounts.json）' : 'Paste Accounts JSON'}
-                  </label>
-                  <textarea
-                    value={batchJson}
-                    onChange={e => setBatchJson(e.target.value)}
-                    rows={6}
-                    placeholder='[{ "user_id": "019f...", "name": "...", "token": "dt-...", "refresh_token": "drt-..." }]'
-                    className="w-full p-3.5 rounded-xl border border-hairline bg-white/60 font-mono text-xs text-ink outline-none focus:border-ink/40 transition-colors"
-                  />
-                </div>
-
-                <div className="pt-2 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={closeAddAccountModal}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
-                  >
-                    {lang === 'zh' ? '取消' : 'Cancel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={doBatchImport}
-                    disabled={!batchJson.trim()}
-                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm cursor-pointer"
-                  >
-                    {lang === 'zh' ? '立即导入' : 'Import Now'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Tab 3: Local Desktop Auth */}
-            {addAccountTab === 'local' && (
-              <div className="p-6 space-y-4">
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed space-y-2">
-                  <div className="flex items-center gap-2 font-bold text-amber-950">
-                    <span className="material-symbols-outlined text-[18px] text-amber-600">warning</span>
-                    {lang === 'zh' ? '仅支持本地运行模式' : 'Local Desktop Only'}
-                  </div>
-                  <p>
-                    {lang === 'zh'
-                      ? '本机导入会自动读取本地桌面端 Qoder 的授权会话文件（~/.config/qoder 或 AppData/qoder）。'
-                      : 'Reads local desktop Qoder session files from ~/.config/qoder or AppData/qoder.'}
-                  </p>
-                  <p className="font-semibold text-red-700">
-                    {lang === 'zh'
-                      ? '注意：若当前服务部署在云端 Linux 服务器或 Docker 容器中，由于没有桌面客户端，此方式无法读取凭据，会报错“auth files not found”。请切回【PAT 令牌添加】！'
-                      : 'Notice: If running on a remote cloud Linux VPS / Docker, local files do not exist. Please use PAT Token instead.'}
-                  </p>
-                </div>
-
-                <div className="pt-2 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={closeAddAccountModal}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
-                  >
-                    {lang === 'zh' ? '取消' : 'Cancel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      await handleImportAuth()
-                      closeAddAccountModal()
-                    }}
-                    disabled={loading}
-                    className="px-6 py-2 bg-ink text-white text-sm font-bold rounded-lg hover:bg-neutral-800 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2 cursor-pointer"
-                  >
-                    {loading && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
-                    {lang === 'zh' ? '尝试从本机导入' : 'Attempt Local Import'}
                   </button>
                 </div>
               </div>
