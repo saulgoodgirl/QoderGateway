@@ -1703,27 +1703,6 @@ export default function App() {
             <h2 className="font-display-md text-ink text-base sm:text-lg font-black mt-0.5 whitespace-nowrap tracking-tight">{title}</h2>
           </div>
           <div className="flex items-center gap-2.5 shrink-0">
-            <div className="hidden xl:flex items-center bg-slate-100 p-0.5 rounded-lg border border-hairline text-xs font-semibold shrink-0">
-              <button
-                onClick={() => setProviderFilter('all')}
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${providerFilter === 'all' ? 'bg-white shadow-subtle text-ink font-bold' : 'text-body hover:text-ink'}`}
-              >
-                {lang === 'zh' ? '全部' : 'All'}
-              </button>
-              <button
-                onClick={() => setProviderFilter('qoder')}
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${providerFilter === 'qoder' ? 'bg-white shadow-subtle text-indigo-700 font-bold' : 'text-body hover:text-indigo-600'}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>Qoder
-              </button>
-              <button
-                onClick={() => setProviderFilter('zcode')}
-                className={`px-2.5 py-1 rounded-md transition-all cursor-pointer flex items-center gap-1 ${providerFilter === 'zcode' ? 'bg-white shadow-subtle text-emerald-700 font-bold' : 'text-body hover:text-emerald-600'}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>ZCode
-              </button>
-            </div>
-
             <button
               onClick={() => openAddAccountModal('pat', 'oauth')}
               className="px-3 py-1.5 bg-ink hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-all shrink-0 cursor-pointer"
@@ -1962,22 +1941,53 @@ export default function App() {
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-body opacity-50 group-focus-within:opacity-100 transition-opacity">search</span>
                   <CustomInput value={searchAccounts} onChange={setSearchAccounts} placeholder={t.accounts.search} className="!pl-12 !py-3 !rounded-xl !bg-white/50" />
                 </div>
-                <div className="flex items-center gap-1.5 p-1 bg-surface-card border border-hairline rounded-xl text-xs font-semibold">
-                  {[
-                    { id: 'all', label: lang === 'zh' ? '全部厂商' : 'All Providers', count: accountsConfig.accounts.length },
-                    { id: 'qoder', label: 'Qoder', count: accountsConfig.accounts.filter(a => (a.provider || 'qoder') === 'qoder').length },
-                    { id: 'zcode', label: 'ZCode (智谱)', count: accountsConfig.accounts.filter(a => a.provider === 'zcode').length },
-                  ].map(p => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setProviderFilter(p.id as any)}
-                      className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${providerFilter === p.id ? 'bg-ink text-white shadow-xs font-bold' : 'text-body hover:text-ink'}`}
-                    >
-                      <span>{p.label}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${providerFilter === p.id ? 'bg-white/20 text-white' : 'bg-black/5 text-body'}`}>{p.count}</span>
-                    </button>
-                  ))}
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-hairline text-xs font-semibold shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setProviderFilter('all')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                      providerFilter === 'all'
+                        ? 'bg-white shadow-subtle text-ink font-bold'
+                        : 'text-body hover:text-ink'
+                    }`}
+                  >
+                    <span>{lang === 'zh' ? '全部' : 'All'}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      providerFilter === 'all' ? 'bg-slate-100 text-slate-700' : 'bg-black/5 text-body'
+                    }`}>{accountsConfig.accounts.length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setProviderFilter('qoder')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                      providerFilter === 'qoder'
+                        ? 'bg-white shadow-subtle text-indigo-700 font-bold'
+                        : 'text-body hover:text-indigo-600'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                    <span>Qoder</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      providerFilter === 'qoder' ? 'bg-indigo-50 text-indigo-700' : 'bg-black/5 text-body'
+                    }`}>{accountsConfig.accounts.filter(a => (a.provider || 'qoder') === 'qoder').length}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setProviderFilter('zcode')}
+                    className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                      providerFilter === 'zcode'
+                        ? 'bg-white shadow-subtle text-emerald-700 font-bold'
+                        : 'text-body hover:text-emerald-600'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <span>ZCode</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                      providerFilter === 'zcode' ? 'bg-emerald-50 text-emerald-700' : 'bg-black/5 text-body'
+                    }`}>{accountsConfig.accounts.filter(a => a.provider === 'zcode').length}</span>
+                  </button>
                 </div>
               </section>
 
