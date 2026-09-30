@@ -507,8 +507,9 @@ export default function App() {
   const [checkinSubTab, setCheckinSubTab] = useState<'qoder' | 'zcode' | 'all'>('qoder')
 
   const [showAddAccountModal, setShowAddAccountModal] = useState(false)
-  const [addAccountTab, setAddAccountTab] = useState<'pat' | 'zcode' | 'custom' | 'batch' | 'local'>('pat')
+  const [addAccountTab, setAddAccountTab] = useState<'pat' | 'zcode'>('pat')
   const [qoderAuthMode, setQoderAuthMode] = useState<'oauth' | 'pat'>('oauth')
+  const [zcodeAuthMode, setZcodeAuthMode] = useState<'pat' | 'local' | 'oauth'>('pat')
   const [oauthRegion, setOauthRegion] = useState<'cn' | 'global'>('cn')
   const [oauthData, setOauthData] = useState<{
     verification_uri: string
@@ -950,7 +951,7 @@ export default function App() {
     }
   }, [oauthRegion, stopPollingOAuth, authedFetch, lang, pushToast, closeAddAccountModal, fetchAccounts, fetchStatus, fetchLogs, fetchCheckinStatus])
 
-  const openAddAccountModal = useCallback((tab: 'pat' | 'zcode' | 'custom' | 'batch' | 'local' = 'pat', mode: 'oauth' | 'pat' = 'oauth') => {
+  const openAddAccountModal = useCallback((tab: 'pat' | 'zcode' = 'pat', mode: 'oauth' | 'pat' = 'oauth') => {
     setAddAccountTab(tab)
     setQoderAuthMode(mode)
     setShowAddAccountModal(true)
@@ -3604,106 +3605,244 @@ export default function App() {
 
             {/* Tab 2: ZCode */}
             {addAccountTab === 'zcode' && (
-              <div className="p-6 space-y-4">
-                {/* Smart Client File Import or Server Local Import */}
-                <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/70 space-y-3">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="space-y-0.5">
-                      <div className="font-bold text-sm text-emerald-950 flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-emerald-600 text-[18px]">folder_open</span>
-                        {lang === 'zh' ? '选择本地 ZCode 配置文件一键读取' : 'Select Local ZCode Config File'}
+              <div className="p-6 space-y-5">
+                {/* ZCode Mode Selector */}
+                <div className="flex items-center justify-between pb-3 border-b border-hairline">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-body">
+                    <span className="material-symbols-outlined text-[16px]">tune</span>
+                    <span>{lang === 'zh' ? '接入方式' : 'Access Mode'}</span>
+                  </div>
+                  <div className="inline-flex p-1 bg-surface-ground border border-hairline rounded-xl gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setZcodeAuthMode('pat')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${zcodeAuthMode === 'pat' ? 'bg-emerald-600 text-white shadow-xs' : 'text-body hover:text-ink'}`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">key</span>
+                      <span>{lang === 'zh' ? 'API Key (PAT)' : 'API Key (PAT)'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setZcodeAuthMode('local')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${zcodeAuthMode === 'local' ? 'bg-ink text-white shadow-xs' : 'text-body hover:text-ink'}`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">folder_open</span>
+                      <span>{lang === 'zh' ? '本地导入' : 'Local File'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setZcodeAuthMode('oauth')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${zcodeAuthMode === 'oauth' ? 'bg-slate-700 text-white shadow-xs' : 'text-body hover:text-ink'}`}
+                    >
+                      <span className="material-symbols-outlined text-[15px]">lock</span>
+                      <span>{lang === 'zh' ? 'OAuth 授权' : 'OAuth'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-mode 1: API Key / PAT */}
+                {zcodeAuthMode === 'pat' && (
+                  <div className="space-y-4">
+                    <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/70 flex items-center justify-between gap-3 text-xs text-emerald-900">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-emerald-700 text-[18px]">verified</span>
+                        <span>{lang === 'zh' ? '智谱开放平台 API Key 即为 ZCode 的 PAT 凭据，每日专享 1 亿 Tokens 算力包。' : 'BigModel API Key acts as ZCode PAT, with 100M Tokens daily privilege.'}</span>
                       </div>
-                      <p className="text-xs text-emerald-800">
-                        {lang === 'zh' ? '点击选择个人电脑 ~/.zcode/v2/config.json 自动提取 API Key' : 'Select ~/.zcode/v2/config.json to auto-extract API Key'}
+                      <a
+                        href="https://bigmodel.cn/usercenter/proj-mgmt/apikeys"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 bg-white border border-emerald-300 rounded-lg font-bold text-[11px] text-emerald-800 hover:bg-emerald-50 shrink-0 flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>{lang === 'zh' ? '获取 Key' : 'Get Key'}</span>
+                        <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                      </a>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-xs font-semibold text-body block uppercase tracking-wider">
+                          {lang === 'zh' ? 'ZCode / BigModel API Key *' : 'ZCode / BigModel API Key *'}
+                        </label>
+                        <span className="text-[11px] text-slate-400 font-mono">格式如: xxxxxxxx.xxxxxxxx</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={zcodeApiKey}
+                        onChange={e => setZcodeApiKey(e.target.value)}
+                        placeholder="xxxxxxxx.xxxxxxxx"
+                        className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                        {lang === 'zh' ? '账号备注 (可选)' : 'Account Alias (Optional)'}
+                      </label>
+                      <input
+                        type="text"
+                        value={zcodeAccountName}
+                        onChange={e => setZcodeAccountName(e.target.value)}
+                        placeholder={lang === 'zh' ? '例如：ZCode 主号 / 智谱' : 'e.g. ZCode Main'}
+                        className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                      />
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={closeAddAccountModal}
+                        className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
+                      >
+                        {lang === 'zh' ? '取消' : 'Cancel'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddZCodeManual}
+                        disabled={!zcodeApiKey.trim() || addingAccount}
+                        className="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2 cursor-pointer"
+                      >
+                        {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
+                        {lang === 'zh' ? '接入 ZCode' : 'Connect ZCode'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-mode 2: Local Import */}
+                {zcodeAuthMode === 'local' && (
+                  <div className="space-y-4">
+                    <div className="p-5 rounded-2xl bg-slate-50 border border-hairline space-y-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-[22px]">folder_open</span>
+                        </div>
+                        <div>
+                          <div className="font-bold text-sm text-ink">{lang === 'zh' ? '选择本地 ZCode 配置文件自动读取' : 'Select Local ZCode Config'}</div>
+                          <p className="text-xs text-body mt-0.5">
+                            {lang === 'zh' ? '系统将解析 ~/.zcode/v2/config.json 自动提取 BigModel 凭据' : 'Parses ~/.zcode/v2/config.json to extract BigModel API Key'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl border-2 border-dashed border-emerald-200/80 bg-emerald-50/30 flex flex-col items-center justify-center gap-2 text-center">
+                        <input
+                          type="file"
+                          id="zcode-config-upload"
+                          accept=".json"
+                          className="hidden"
+                          onChange={handleZCodeConfigFileSelect}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => document.getElementById('zcode-config-upload')?.click()}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-2 cursor-pointer transition-all"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">upload_file</span>
+                          <span>{lang === 'zh' ? '点击选择 config.json 文件' : 'Choose config.json'}</span>
+                        </button>
+                        <span className="text-[11px] text-emerald-800">
+                          {lang === 'zh' ? '路径通常为 C:\\Users\\你的用户名\\.zcode\\v2\\config.json' : 'Path is usually ~/.zcode/v2/config.json'}
+                        </span>
+                      </div>
+
+                      {typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+                        <div className="pt-3 border-t border-hairline flex items-center justify-between">
+                          <span className="text-xs text-slate-500">{lang === 'zh' ? '检测到本地运行模式：可一键直读本机磁盘' : 'Localhost detected: can read direct path'}</span>
+                          <button
+                            type="button"
+                            onClick={handleImportZCodeLocal}
+                            disabled={importingZCodeLocal}
+                            className="px-3 py-1.5 rounded-lg border border-emerald-200 text-xs font-bold text-emerald-800 hover:bg-emerald-50 cursor-pointer"
+                          >
+                            {importingZCodeLocal ? (lang === 'zh' ? '读取中...' : 'Reading...') : (lang === 'zh' ? '一键读取本机' : 'Read Direct')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2 flex justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={closeAddAccountModal}
+                        className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
+                      >
+                        {lang === 'zh' ? '取消' : 'Cancel'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sub-mode 3: OAuth Evaluation & Guidance */}
+                {zcodeAuthMode === 'oauth' && (
+                  <div className="space-y-4">
+                    <div className="p-5 rounded-2xl bg-amber-50/80 border border-amber-200/80 space-y-3 text-xs leading-relaxed text-amber-950">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 font-bold text-sm text-amber-950">
+                          <span className="material-symbols-outlined text-amber-600 text-[20px]">info</span>
+                          <span>{lang === 'zh' ? '智谱 BigModel OAuth 机制评估' : 'ZCode OAuth Evaluation'}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200/70 text-amber-900 font-mono">
+                          Client Private Secret
+                        </span>
+                      </div>
+                      <p>
+                        {lang === 'zh'
+                          ? '智谱开放平台的网页 OAuth 授权采用了客户端内置私有密钥（BIGMODEL_OAUTH_APP_SECRET），未提供面向第三方网关的 RFC 8628 设备代码授权公开流（与 Qoder 开源流不同）。'
+                          : 'ZhiPu BigModel OAuth relies on private embedded client credentials and does not expose a public RFC 8628 device flow.'}
+                      </p>
+                      <p className="font-semibold text-amber-900">
+                        {lang === 'zh'
+                          ? '推荐方案：若您已在桌面端运行过 ZCode 并完成登录，客户端已自动将凭据保存到本地。只需点击【本地导入】选择 config.json 即可一秒同步！或直接使用【API Key】快速录入。'
+                          : 'Recommended: If you logged into ZCode desktop, your key is already saved in config.json. Use Local Import or API Key directly.'}
                       </p>
                     </div>
-                    <div>
-                      <input
-                        type="file"
-                        id="zcode-config-upload"
-                        accept=".json"
-                        className="hidden"
-                        onChange={handleZCodeConfigFileSelect}
-                      />
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
                       <button
                         type="button"
-                        onClick={() => document.getElementById('zcode-config-upload')?.click()}
-                        className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shrink-0 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        onClick={() => setZcodeAuthMode('local')}
+                        className="p-3.5 rounded-xl border border-hairline bg-surface-card hover:bg-slate-50 transition-all text-left flex items-start gap-3 cursor-pointer group"
                       >
-                        <span className="material-symbols-outlined text-[16px]">file_upload</span>
-                        {lang === 'zh' ? '选择文件导入' : 'Choose File'}
+                        <span className="material-symbols-outlined text-emerald-600 text-[22px] shrink-0 mt-0.5">folder_open</span>
+                        <div>
+                          <div className="font-bold text-xs text-ink group-hover:text-emerald-700 transition-colors">
+                            {lang === 'zh' ? '前往【本地导入】' : 'Go to Local Import'}
+                          </div>
+                          <div className="text-[11px] text-body mt-0.5">
+                            {lang === 'zh' ? '选择本地 config.json 免复制' : 'Select local config.json'}
+                          </div>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setZcodeAuthMode('pat')}
+                        className="p-3.5 rounded-xl border border-hairline bg-surface-card hover:bg-slate-50 transition-all text-left flex items-start gap-3 cursor-pointer group"
+                      >
+                        <span className="material-symbols-outlined text-indigo-600 text-[22px] shrink-0 mt-0.5">key</span>
+                        <div>
+                          <div className="font-bold text-xs text-ink group-hover:text-indigo-700 transition-colors">
+                            {lang === 'zh' ? '前往【API Key 录入】' : 'Go to API Key'}
+                          </div>
+                          <div className="text-[11px] text-body mt-0.5">
+                            {lang === 'zh' ? '直接粘贴官网 API Key' : 'Paste BigModel API Key'}
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+
+                    <div className="pt-2 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={closeAddAccountModal}
+                        className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
+                      >
+                        {lang === 'zh' ? '关闭' : 'Close'}
                       </button>
                     </div>
                   </div>
-
-                  {typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-                    <div className="pt-2 border-t border-emerald-200/50 flex items-center justify-between">
-                      <span className="text-[11px] text-emerald-800">{lang === 'zh' ? '本机开发环境运行：可直接读取当前系统的 ~/.zcode' : 'Localhost detected: can read direct filesystem'}</span>
-                      <button
-                        type="button"
-                        onClick={handleImportZCodeLocal}
-                        disabled={importingZCodeLocal}
-                        className="text-xs font-bold text-emerald-800 underline hover:text-emerald-950 cursor-pointer"
-                      >
-                        {importingZCodeLocal ? (lang === 'zh' ? '读取中...' : 'Reading...') : (lang === 'zh' ? '直接读取本机路径' : 'Direct Read')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="relative flex py-1 items-center">
-                  <div className="flex-grow border-t border-hairline"></div>
-                  <span className="flex-shrink mx-3 text-body text-[11px] font-semibold">{lang === 'zh' ? '或者手动录入 API Key' : 'Or Manual Input'}</span>
-                  <div className="flex-grow border-t border-hairline"></div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-body block uppercase tracking-wider">
-                      {lang === 'zh' ? 'ZCode / BigModel API Key *' : 'ZCode / BigModel API Key *'}
-                    </label>
-                    <span className="text-[11px] text-slate-400 font-mono">格式如: xxxxxxxx.xxxxxxxx</span>
-                  </div>
-                  <input
-                    type="text"
-                    value={zcodeApiKey}
-                    onChange={e => setZcodeApiKey(e.target.value)}
-                    placeholder="xxxxxxxx.xxxxxxxx"
-                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
-                    {lang === 'zh' ? '账号备注 (可选)' : 'Account Alias (Optional)'}
-                  </label>
-                  <input
-                    type="text"
-                    value={zcodeAccountName}
-                    onChange={e => setZcodeAccountName(e.target.value)}
-                    placeholder={lang === 'zh' ? '例如：ZCode 主号 / 智谱' : 'e.g. ZCode Main'}
-                    className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 text-sm text-ink outline-none focus:border-ink/40 transition-colors"
-                  />
-                </div>
-
-                <div className="pt-2 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={closeAddAccountModal}
-                    className="px-4 py-2 text-sm font-semibold text-body border border-hairline rounded-lg hover:text-ink transition-colors cursor-pointer"
-                  >
-                    {lang === 'zh' ? '取消' : 'Cancel'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAddZCodeManual}
-                    disabled={!zcodeApiKey.trim() || addingAccount}
-                    className="px-6 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-40 shadow-sm flex items-center gap-2"
-                  >
-                    {addingAccount && <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>}
-                    {lang === 'zh' ? '接入 ZCode' : 'Connect ZCode'}
-                  </button>
-                </div>
+                )}
               </div>
             )}
           </div>
