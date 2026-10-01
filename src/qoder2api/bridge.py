@@ -10,10 +10,12 @@ import httpx
 
 from . import encoding
 from .auth import SessionContext, bearer_headers
+from .enterprise import enterprise_origins
 from .env import httpx_client_kwargs
 
 
-QODER_CHAT_URL_CN = "https://gateway.qoder.com.cn/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
+_QODER_CHAT_PATH_CN = "/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
+QODER_CHAT_URL_CN = "https://gateway.qoder.com.cn" + _QODER_CHAT_PATH_CN
 QODER_CHAT_URL = "https://api3.qoder.sh/algo/api/v2/service/pro/sse/agent_chat_generation?FetchKeys=llm_model_result&AgentId=agent_common&Encode=1"
 # 新版协议（Qoder CLI 现行）：OpenAI 兼容端点，纯 Bearer，无 COSY 签名，响应为标准 OpenAI SSE。
 # 性能远优于老版（老版默认带长 reasoning，复杂任务可到分钟级）。
@@ -368,8 +370,11 @@ class ToolCallAccumulator:
 async def qoder_stream_lines(sess: SessionContext, body: dict[str, Any], model: str) -> AsyncIterator[str]:
     region = getattr(sess.identity, "region", "cn")
     if region == "cn":
-        # 国内版 Qoder CN 走 gateway.qoder.com.cn SSE
+        # 国内版 Qoder CN 走 gateway.qoder.com.cn SSE；企业 VPC 账号换用 {name}-gateway.vpc.qoder.com.cn
         chat_url = QODER_CHAT_URL_CN
+        enterprise_domain = getattr(sess.identity, "enterprise_domain", "")
+        if enterprise_domain:
+            chat_url = enterprise_origins(str(enterprise_domain))["gateway"] + _QODER_CHAT_PATH_CN
         encoded_body = encoding.encode(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
         extra = {"x-model-key": model, "x-model-source": body.get("model_config", {}).get("source", "system")}
         headers = bearer_headers(sess, chat_url, encoded_body, "text/event-stream", extra)

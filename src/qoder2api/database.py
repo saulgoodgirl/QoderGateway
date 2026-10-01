@@ -40,7 +40,8 @@ def init_db():
                 is_quota_exceeded INTEGER DEFAULT 0,
                 plan TEXT,
                 user_tag TEXT,
-                next_reset_at INTEGER
+                next_reset_at INTEGER,
+                enterprise_domain TEXT
             )
             """
         )
@@ -122,6 +123,12 @@ def init_db():
         # region 列（幂等：已存在则忽略，默认 cn）
         try:
             conn.execute("ALTER TABLE accounts ADD COLUMN region TEXT DEFAULT 'cn'")
+        except Exception:
+            pass
+
+        # enterprise_domain 列（幂等：已存在则忽略；存归一化后的企业 VPC 实例名，公共账号为 NULL）
+        try:
+            conn.execute("ALTER TABLE accounts ADD COLUMN enterprise_domain TEXT")
         except Exception:
             pass
 

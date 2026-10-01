@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding as asymmetric_padd
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from . import encoding
+from .enterprise import enterprise_origins, normalize_vpc_domain
 from .env import httpx_client_kwargs
 from .signature import APPCODE, current_date, sign
 
@@ -38,6 +39,7 @@ class AuthIdentity:
     security_oauth_token: str
     refresh_token: str
     region: str = "cn"
+    enterprise_domain: str = ""
 
 
 @dataclass(frozen=True)
@@ -178,18 +180,23 @@ async def exchange_job_token(personal_token: str, machine_id: str, machine_token
     return response.json()
 
 
-async def exchange_job_token_cn(personal_token: str) -> tuple[str, str, dict[str, Any]]:
-    """Exchange PAT for domestic Qoder CN."""
-    headers = {
+def _cn_style_headers() -> dict[str, str]:
+    """CN / Global / 企业 VPC 兑换与 userinfo 共用的请求头。"""
+    return {
         "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": "pi-provider-qoder",
         "Cosy-Version": "1.0.1",
         "Cosy-ClientType": "5",
     }
+
+
+async def exchange_job_token_cn(personal_token: str, openapi_base: str = "https://openapi.qoder.com.cn") -> tuple[str, str, dict[str, Any]]:
+    """Exchange PAT for domestic Qoder CN（openapi_base 可替换为企业 VPC openapi）。"""
+    headers = _cn_style_headers()
     async with httpx.AsyncClient(timeout=15, **httpx_client_kwargs()) as client:
         resp = await client.post(
-            "https://openapi.qoder.com.cn/api/v1/jobToken/exchange",
+            f"{openapi_base}/api/v1/jobToken/exchange",
             json={"personal_token": personal_token},
             headers=headers,
         )
@@ -204,7 +211,7 @@ async def exchange_job_token_cn(personal_token: str) -> tuple[str, str, dict[str
         user_data = {}
         try:
             u_resp = await client.get(
-                "https://openapi.qoder.com.cn/api/v1/userinfo",
+                f"{openapi_base}/api/v1/userinfo",
                 headers={"Authorization": f"Bearer {token}", **headers},
             )
             if u_resp.status_code == 200:
@@ -216,13 +223,7 @@ async def exchange_job_token_cn(personal_token: str) -> tuple[str, str, dict[str
 
 async def exchange_job_token_global(personal_token: str) -> tuple[str, str, dict[str, Any]]:
     """Exchange PAT for global Qoder openapi."""
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": "pi-provider-qoder",
-        "Cosy-Version": "1.0.1",
-        "Cosy-ClientType": "5",
-    }
+    headers = _cn_style_headers()
     async with httpx.AsyncClient(timeout=15, **httpx_client_kwargs()) as client:
         resp = await client.post(
             "https://openapi.qoder.sh/api/v1/jobToken/exchange",
@@ -247,8 +248,33 @@ async def exchange_job_token_global(personal_token: str) -> tuple[str, str, dict
         return token, refresh_token, user_data
 
 
-async def create_session(personal_token: str) -> SessionContext:
+async def create_session(personal_token: str, enterprise_domain: str = "") -> SessionContext:
     machine_id, machine_token, machine_type = new_machine()
+
+    # 0. 企业版 Qoder CN VPC：只走企业专属 openapi（不回退公共域名 / 老版兑换）
+    if str(enterprise_domain or "").strip():
+        instance = normalize_vpc_domain(enterprise_domain)
+        openapi = enterprise_origins(instance)["openapi"]
+        try:
+            token, refresh_token, user_data = await exchange_job_token_cn(personal_token, openapi)
+        except Exception as e_ent:
+            raise RuntimeError(f"企业版 PAT 验证失败 ({openapi}): {e_ent}")
+        uid = str(user_data.get("id") or user_data.get("userId") or user_data.get("user_id") or ("cn_" + personal_token[-12:]))
+        name = str(user_data.get("name") or user_data.get("nickname") or user_data.get("email") or "Qoder CN")
+        identity = AuthIdentity(
+            name=name,
+            aid=uid,
+            uid=uid,
+            yx_uid="",
+            organization_id="",
+            organization_name="",
+            user_type="personal_standard",
+            security_oauth_token=token,
+            refresh_token=refresh_token,
+            region="cn",
+            enterprise_domain=instance,
+        )
+        return new_session(identity, machine_id, machine_token, machine_type)
 
     # 1. 优先尝试国内版 Qoder CN (openapi.qoder.com.cn)
     try:

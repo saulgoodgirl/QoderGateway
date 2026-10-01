@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 
 from .database import get_db
+from .enterprise import enterprise_origins
 
 OPENAPI_GLOBAL = "https://openapi.qoder.sh"
 OPENAPI_CN = "https://openapi.qoder.com.cn"
@@ -23,6 +24,15 @@ REFRESH_INTERVAL = 6 * 3600  # 6 小时
 
 def get_openapi_url(region: str = "cn") -> str:
     return OPENAPI_CN if (region or "").lower() == "cn" else OPENAPI_GLOBAL
+
+
+def openapi_base_for_account(row: Any) -> str:
+    """企业账号 → 派生企业 VPC openapi origin；否则按 region 走公共域名。"""
+    domain = row["enterprise_domain"] if "enterprise_domain" in row.keys() else None
+    if domain:
+        return enterprise_origins(str(domain))["openapi"]
+    region = row["region"] if "region" in row.keys() else "cn"
+    return get_openapi_url(region)
 
 
 def _headers() -> dict[str, str]:
@@ -50,8 +60,7 @@ def refresh_one_account(uid: str) -> dict[str, Any]:
     if not rt:
         return {"ok": False, "uid": uid, "error": "无 refresh_token"}
 
-    region = row["region"] if "region" in row.keys() else "cn"
-    base_api = get_openapi_url(region)
+    base_api = openapi_base_for_account(row)
 
     # drt- → deviceToken/refresh；jrt- → jobToken/refresh
     if rt.startswith("jrt-"):
@@ -156,12 +165,11 @@ def get_account_quota(uid: str) -> dict[str, Any]:
     tok = row["security_oauth_token"] or ""
     if not tok:
         return {"ok": False, "uid": uid, "error": "无 token"}
-    region = row["region"] if "region" in row.keys() else "cn"
-    base_api = get_openapi_url(region)
+    base_api = openapi_base_for_account(row)
     try:
         r = httpx.get(
             f"{base_api}/api/v2/quota/usage",
-            headers={"Authorization": f"Bearer {tok}", "Accept": "application/json", "User-Agent": UA},
+            headers={**_headers(), "Authorization": f"Bearer {tok}", "Accept": "application/json"},
             timeout=20,
         )
     except httpx.HTTPError as e:
@@ -169,7 +177,15 @@ def get_account_quota(uid: str) -> dict[str, Any]:
     if r.status_code != 200:
         return {"ok": False, "uid": uid, "error": f"HTTP {r.status_code}: {r.text[:160]}"}
 
-    q_data = r.json()
+    try:
+        q_data = r.json()
+    except ValueError:
+        # 非 JSON 200 载荷（如 VPC 登录页 HTML）同样按失败处理，避免异常冒泡
+        return {"ok": False, "uid": uid, "error": f"配额响应解析失败: {r.text[:160]}"}
+    # 错误载荷防护：VPC 等端点可能以 200 返回 {"code": ...} 错误体，避免把非配额载荷写成 0
+    quota_keys = ("userQuota", "addOnQuota", "orgResourcePackage")
+    if not isinstance(q_data, dict) or not any(k in q_data for k in quota_keys):
+        return {"ok": False, "uid": uid, "error": f"配额响应异常: {str(q_data)[:160]}"}
     try:
         uq = q_data.get("userQuota") or {}
         addon = q_data.get("addOnQuota") or {}

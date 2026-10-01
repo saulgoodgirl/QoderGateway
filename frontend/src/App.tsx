@@ -15,6 +15,7 @@ interface Account {
   last_error: string | null; quota: number; is_quota_exceeded: boolean
   plan: string | null; user_tag: string | null; next_reset_at: number | null
   provider?: string; base_url?: string
+  region?: string | null; enterprise_domain?: string | null; is_enterprise?: boolean
 }
 interface AccountsConfig { accounts: Account[]; active_uid: string | null }
 interface UIStatus { ready: boolean; mode: string; username: string | null; uid: string | null; user_type: string | null; error: string | null; accounts_count: number }
@@ -537,6 +538,7 @@ export default function App() {
 
   const [addAccountPat, setAddAccountPat] = useState('')
   const [addAccountName, setAddAccountName] = useState('')
+  const [addAccountDomain, setAddAccountDomain] = useState('')
   const [addingAccount, setAddingAccount] = useState(false)
 
   // Multi-provider state
@@ -677,8 +679,9 @@ export default function App() {
       const resp = await authedFetch('/ui/accounts/quota')
       const data = await resp.json()
       setQuotaList(data.quotas || [])
+      fetchAccounts()
     } catch { pushToast('ERROR', lang === 'zh' ? '限额查询失败' : 'Quota query failed', '') }
-  }, [authedFetch, lang, pushToast])
+  }, [authedFetch, lang, pushToast, fetchAccounts])
 
   const fetchLogs = useCallback(async () => {
     try { const resp = await authedFetch('/ui/logs'); const data = await resp.json(); setLogs(data) } catch { /* */ }
@@ -1119,10 +1122,13 @@ export default function App() {
     if (!trimmed) return
     setAddingAccount(true)
     try {
+      const body: Record<string, string | undefined> = { pat: trimmed, name: addAccountName.trim() || undefined }
+      const domain = addAccountDomain.trim()
+      if (domain) body.enterprise_domain = domain
       const resp = await authedFetch('/ui/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pat: trimmed, name: addAccountName.trim() || undefined }),
+        body: JSON.stringify(body),
       })
       if (!resp.ok) {
         const err = await resp.json()
@@ -1132,6 +1138,7 @@ export default function App() {
       pushToast('SUCCESS', lang === 'zh' ? '账号已成功添加' : 'Account Added Successfully', msg.patAdded(data.name || 'PAT Account'))
       setAddAccountPat('')
       setAddAccountName('')
+      setAddAccountDomain('')
       closeAddAccountModal()
       fetchAccounts()
       fetchStatus()
@@ -1880,7 +1887,7 @@ export default function App() {
                     value={batchJson}
                     onChange={e => setBatchJson(e.target.value)}
                     rows={6}
-                    placeholder='[{ "user_id": "019f...", "name": "...", "email": "...", "token": "dt-...", "refresh_token": "drt-...", "expires_at": "..." }]'
+                    placeholder='[{ "user_id": "019f...", "name": "...", "email": "...", "token": "dt-...", "refresh_token": "drt-...", "expires_at": "...", "enterprise_domain": "acme.vpc.qoder.com.cn" }]'
                     className="w-full p-4 rounded-xl border border-hairline bg-white/60 font-mono text-[13px] text-ink outline-none focus:border-ink/30 transition-colors"
                   />
                   <div className="mt-3 flex gap-3">
@@ -2072,6 +2079,14 @@ export default function App() {
                                     {isActive && <span className="text-[9px] bg-mint/20 text-ink px-1.5 py-0.5 rounded font-extrabold uppercase">Active</span>}
                                     {currentMode === 'dedicated' && (
                                       <span className="text-[9px] bg-amber-100 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-bold">专属</span>
+                                    )}
+                                    {acc.enterprise_domain && (
+                                      <span
+                                        className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded font-bold"
+                                        title={lang === 'zh' ? '企业版 VPC 域名：刷新/配额/对话路由到该企业实例' : 'Enterprise VPC domain: refresh/quota/chat route to this instance'}
+                                      >
+                                        {acc.enterprise_domain}
+                                      </span>
                                     )}
                                   </div>
                                   <div>
@@ -3762,9 +3777,36 @@ export default function App() {
                       />
                     </div>
 
+                    <div>
+                      <label className="text-xs font-semibold text-body mb-2 block uppercase tracking-wider">
+                        {lang === 'zh' ? '企业版 VPC 域名 (可选)' : 'Enterprise VPC Domain (Optional)'}
+                      </label>
+                      <input
+                        type="text"
+                        value={addAccountDomain}
+                        onChange={e => setAddAccountDomain(e.target.value)}
+                        placeholder="acme.vpc.qoder.com.cn"
+                        className="w-full px-4 py-2.5 rounded-xl border border-hairline bg-white/60 font-mono text-sm text-ink outline-none focus:border-ink/40 transition-colors"
+                      />
+                      <p className="mt-1.5 text-[11px] text-body leading-relaxed">
+                        {lang === 'zh'
+                          ? '企业版（Qoder CN VPC）用户请填写企业域名，如 acme.vpc.qoder.com.cn；公共版账号请留空。'
+                          : 'For Qoder CN VPC (enterprise) accounts only, e.g. acme.vpc.qoder.com.cn. Leave empty for public accounts.'}
+                      </p>
+                    </div>
+
                     <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/60 text-xs text-blue-900 leading-relaxed">
-                      <p className="font-semibold mb-1">💡 如何获取 PAT 令牌：</p>
-                      <p>登录 Qoder 官网个人中心 (Settings -&gt; Personal Access Tokens) 创建一个 PAT，复制粘贴到上方即可自动验证并接入账号池参与轮询与并发请求。</p>
+                      <p className="font-semibold mb-1">{lang === 'zh' ? '💡 如何获取 PAT 令牌：' : '💡 How to get a PAT:'}</p>
+                      <p>
+                        {lang === 'zh'
+                          ? '登录 Qoder 官网个人中心 (Settings -> Personal Access Tokens) 创建一个 PAT，复制粘贴到上方即可自动验证并接入账号池参与轮询与并发请求。'
+                          : 'Sign in to Qoder and create a PAT under Settings -> Personal Access Tokens, then paste it above to verify and join the routing pool.'}
+                      </p>
+                      <p className="mt-1">
+                        {lang === 'zh'
+                          ? '企业版用户请先填写上方企业域名，PAT 获取入口为 https://{企业域名}/account/integrations（例如 https://acme.vpc.qoder.com.cn/account/integrations）。'
+                          : 'Enterprise users: fill in the domain above first — your PAT page is https://{domain}/account/integrations (e.g. https://acme.vpc.qoder.com.cn/account/integrations).'}
+                      </p>
                     </div>
 
                     <div className="pt-2 flex justify-end gap-3">
