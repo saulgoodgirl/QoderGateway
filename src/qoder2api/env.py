@@ -37,6 +37,12 @@ def proxy_url() -> str | None:
     return value or None
 
 
+def reasoning_mode() -> str:
+    """流式推理内容处理模式：pass（透传 reasoning_content + 静默心跳，默认）/ ping（仅心跳）/ drop（旧行为）。"""
+    value = os.getenv("QODER_REASONING_MODE", "").strip().lower()
+    return value if value in {"pass", "ping", "drop"} else "pass"
+
+
 def httpx_client_kwargs() -> dict:
     proxy = proxy_url()
     return {"proxy": proxy} if proxy else {}

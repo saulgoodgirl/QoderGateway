@@ -184,6 +184,7 @@ curl http://localhost:5050/v1/chat/completions \
 | `QODER_ENABLE_DOCUMENTS` | Bool | `1` | 是否启用内置 `/documents` 文档百科页面 |
 | `QODER_ENABLE_LANDING` | Bool | `1` | 是否启用首页 Landing Page 介绍页 |
 | `QODER_PAT` | String | `""` | 可选：容器初次启动无账号时自动导入的环境变量 PAT |
+| `QODER_REASONING_MODE` | String | `pass` | 流式推理内容处理模式：`pass` 透传 `reasoning_content` 增量并在静默期发 `: ping` 心跳；`ping` 仅心跳（丢弃推理）；`drop` 旧行为（不透传/无心跳）。未知值回落 `pass` |
 
 ---
 
