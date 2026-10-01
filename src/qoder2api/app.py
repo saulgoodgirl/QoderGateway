@@ -679,6 +679,11 @@ def is_account_error(exc: Exception) -> bool:
                    "insufficient", "personal token", "credit"):
             if kw in msg:
                 return True
+        # 模型/账号不兼容（如 intl 账号收到 CN 模型 ID）视为账号级：默认池路由应轮换到兼容账号；
+        # 定向调用（X-Account / model@account）在重试循环里最先分流为直接报错，不受此处影响。
+        for kw in ("invalid_model_error", "unsupported model", "model not found"):
+            if kw in msg:
+                return True
     return False
 
 
