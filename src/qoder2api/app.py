@@ -817,7 +817,7 @@ async def chat_completions(
                     return StreamingResponse(
                         gen,
                         media_type="text/event-stream",
-                        headers={"Cache-Control": "no-cache"},
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
                     )
                 else:
                     add_log(f"Generating completion response via {provider.upper()}...")
@@ -844,7 +844,7 @@ async def chat_completions(
                 return StreamingResponse(
                     stream_success_wrapper(first_item, gen),
                     media_type="text/event-stream",
-                    headers={"Cache-Control": "no-cache"},
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
                 )
             else:
                 add_log(f"Generating full completion response (Attempt {attempt+1}/{max_retries})...")
