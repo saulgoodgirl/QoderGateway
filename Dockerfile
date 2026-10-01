@@ -15,4 +15,4 @@ ENV DB_PATH=/app/data/qoder2api.db
 
 EXPOSE 5050
 
-CMD [" python\, \-m\, \qoder2api.app\]
+CMD ["python", "-m", "qoder2api.app"]
