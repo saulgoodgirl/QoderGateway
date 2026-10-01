@@ -15,6 +15,7 @@ from .auth import SessionContext, create_session, load_local_session
 from .bridge import complete_openai_response, stream_openai_response
 from .config import load_config, save_config
 from .database import get_db
+from .enterprise import normalize_vpc_domain
 from .env import env_bool
 from .accounts import (
     db_load_accounts,
@@ -619,11 +620,18 @@ async def set_session(payload: dict[str, Any], verify: None = Depends(check_gate
     global _local_auth_error
     pat = str(payload.get("pat") or os.getenv("QODER_PAT", "")).strip()
     name_override = str(payload.get("name") or "").strip()
+    enterprise_raw = str(payload.get("enterprise_domain") or "").strip()
     if not pat:
         raise HTTPException(status_code=400, detail="PAT is required")
+    enterprise_domain = ""
+    if enterprise_raw:
+        try:
+            enterprise_domain = normalize_vpc_domain(enterprise_raw)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         add_log("Attempting to save session from PAT...")
-        sess = await create_session(pat)
+        sess = await create_session(pat, enterprise_domain)
         account_name = name_override or sess.identity.name or "PAT Account"
         
         # Insert or update in SQLite
@@ -632,18 +640,26 @@ async def set_session(payload: dict[str, Any], verify: None = Depends(check_gate
                 """
                 INSERT OR REPLACE INTO accounts (
                     uid, name, user_type, security_oauth_token, refresh_token, machine_id,
-                    enabled, last_status, last_error, region
-                ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', NULL, ?)
+                    enabled, last_status, last_error, region, enterprise_domain
+                ) VALUES (?, ?, ?, ?, ?, ?, 1, 'ok', NULL, ?, ?)
                 """,
                 (sess.identity.uid, account_name, sess.identity.user_type,
-                 sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id, sess.identity.region)
+                 sess.identity.security_oauth_token, sess.identity.refresh_token, sess.machine_id,
+                 sess.identity.region, sess.identity.enterprise_domain or None)
             )
             
         db_set_settings("active_uid", sess.identity.uid)
         
-        add_log(f"Session saved from PAT. User: {account_name} ({sess.identity.uid})")
+        domain_note = f" [enterprise: {sess.identity.enterprise_domain}]" if sess.identity.enterprise_domain else ""
+        add_log(f"Session saved from PAT. User: {account_name} ({sess.identity.uid}){domain_note}")
         _local_auth_error = None
-        return {"ready": True, "id": sess.identity.uid, "name": account_name, "user_type": sess.identity.user_type}
+        return {
+            "ready": True,
+            "id": sess.identity.uid,
+            "name": account_name,
+            "user_type": sess.identity.user_type,
+            "enterprise_domain": sess.identity.enterprise_domain,
+        }
     except Exception as exc:
         msg = f"Failed to authenticate with provided PAT: {exc}"
         add_log(msg, "ERROR")

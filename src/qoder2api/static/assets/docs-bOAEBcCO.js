@@ -1,4 +1,4 @@
-import{i as e,n as t,r as n,s as r,t as i}from"./jsx-runtime-DypwoGgn.js";import{i as a,n as o,r as s,t as c}from"./lib-OueF5ySH.js";var l=`# Account Pool & Autonomous Maintenance
+import{i as e,n as t,r as n,s as r,t as i}from"./jsx-runtime-C_jTJn-e.js";import{i as a,n as o,r as s,t as c}from"./lib-BeWZ5vbO.js";var l=`# Account Pool & Autonomous Maintenance
 
 GITIT unifies multiple upstream provider accounts (domestic Qoder, Zhipu ZCode, and custom OpenAI-compatible endpoints) into a single resilient routing pool with automatic failover.
 

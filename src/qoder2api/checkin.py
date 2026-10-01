@@ -104,14 +104,17 @@ def _headers(token: str, client_type: str = "10") -> dict[str, str]:
 
 
 def is_enterprise_account(row: Any) -> bool:
-    """判断是否为企业版/团队版账号（免签且不参与每日个人签到加油包福利）。"""
+    """判断是否为企业版/团队版账号（免签且不参与每日个人签到加油包福利）。
+    企业 VPC 域名账号（enterprise_domain 非空）同样视同企业账号。"""
     if row is None:
         return False
     u_type = ""
     plan = ""
+    domain = ""
     if isinstance(row, dict):
         u_type = str(row.get("user_type") or "").strip().lower()
         plan = str(row.get("plan") or "").strip().lower()
+        domain = str(row.get("enterprise_domain") or "").strip()
     else:
         try:
             u_type = str(row["user_type"] or "").strip().lower()
@@ -121,7 +124,11 @@ def is_enterprise_account(row: Any) -> bool:
             plan = str(row["plan"] or "").strip().lower()
         except (KeyError, IndexError, TypeError):
             pass
-    return "team" in u_type or "org" in u_type or "enterprise" in u_type or "team" in plan or "enterprise" in plan
+        try:
+            domain = str(row["enterprise_domain"] or "").strip()
+        except (KeyError, IndexError, TypeError):
+            pass
+    return bool(domain) or "team" in u_type or "org" in u_type or "enterprise" in u_type or "team" in plan or "enterprise" in plan
 
 
 def get_checkin_status(uid: str) -> dict[str, Any]:
@@ -516,10 +523,10 @@ def checkin_all_accounts(force: bool = False) -> dict[str, Any]:
     """为数据库中所有启用的个人版账号执行签到（自动剔除免签的企业团队版）。"""
     with get_db() as conn:
         all_rows = conn.execute(
-            "SELECT uid, name, user_type, plan FROM accounts WHERE enabled = 1"
+            "SELECT uid, name, user_type, plan, enterprise_domain FROM accounts WHERE enabled = 1"
         ).fetchall()
 
-    # 彻底剔除企业版账号，只让个人版账号参与签到
+    # 彻底剔除企业版账号（含企业 VPC 域名账号），只让个人版账号参与签到
     rows = [r for r in all_rows if not is_enterprise_account(r)]
 
     now_sh = datetime.now(TZ_SHANGHAI)
@@ -822,7 +829,35 @@ def get_all_accounts_checkin_overview(force: bool = False) -> dict[str, Any]:
     zcode_total_tokens_today = sum(int(a.get("quota_info", {}).get("total", 0)) for a in zcode_accounts)
     zcode_remaining_tokens = sum(int(a.get("quota_info", {}).get("remaining", 0)) for a in zcode_accounts)
 
-    enterprise_remaining_credits = sum(_safe_float(r["quota"]) for r in enterprise_rows)
+    # 企业行同样刷新配额（与个人行相同的有界 fan-out；失败静默回退到存储值）
+    if len(enterprise_rows) > 0:
+        def refresh_enterprise_quota(r: Any) -> None:
+            try:
+                from .tokens import get_account_quota
+                get_account_quota(r["uid"])
+            except Exception:
+                pass
+
+        with ThreadPoolExecutor(max_workers=min(len(enterprise_rows), 8)) as executor:
+            list(executor.map(refresh_enterprise_quota, enterprise_rows))
+
+        # 成功刷新的行取库内最新配额参与求和，失败的行仍是未改写的存储值
+        ent_uids = [r["uid"] for r in enterprise_rows]
+        placeholders = ",".join("?" for _ in ent_uids)
+        with get_db() as conn:
+            fresh_quotas = {
+                fr["uid"]: fr["quota"]
+                for fr in conn.execute(
+                    f"SELECT uid, quota FROM accounts WHERE uid IN ({placeholders})",
+                    tuple(ent_uids),
+                ).fetchall()
+            }
+        enterprise_remaining_credits = sum(
+            _safe_float(fresh_quotas.get(r["uid"], r["quota"])) for r in enterprise_rows
+        )
+    else:
+        enterprise_remaining_credits = 0.0
+
     pool_total_remaining_credits = round(personal_remaining_credits + enterprise_remaining_credits, 1)
 
     result = {

@@ -11,6 +11,7 @@ from .auth import (
     fetch_user_status
 )
 from .database import get_db
+from .enterprise import normalize_vpc_domain
 
 
 def db_get_settings(key: str, default: str | None = None) -> str | None:
@@ -44,7 +45,13 @@ def db_load_accounts() -> dict[str, Any]:
             account["enabled"] = bool(account.get("enabled", 1))
             u_type = str(account.get("user_type") or "").lower()
             plan_val = str(account.get("plan") or "")
-            account["is_enterprise"] = (plan_val == "Teams" or "team" in u_type or "org" in u_type or "enterprise" in u_type)
+            account["is_enterprise"] = (
+                plan_val == "Teams"
+                or "team" in u_type
+                or "org" in u_type
+                or "enterprise" in u_type
+                or bool(account.get("enterprise_domain"))
+            )
             account["provider"] = account.get("provider") or "qoder"
             account["base_url"] = account.get("base_url") or ""
             accounts.append(account)
@@ -92,13 +99,13 @@ async def import_current_auth() -> dict[str, Any]:
             INSERT OR REPLACE INTO accounts (
                 uid, name, user_type, security_oauth_token, refresh_token, machine_id,
                 enabled, last_status, last_error, quota, is_quota_exceeded, plan,
-                user_tag, next_reset_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                user_tag, next_reset_at, enterprise_domain
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 uid, name, sess.identity.user_type, sess.identity.security_oauth_token,
                 sess.identity.refresh_token, sess.machine_id, enabled, "ok", None,
-                quota_val, is_exceeded, plan_val, user_tag_val, next_reset
+                quota_val, is_exceeded, plan_val, user_tag_val, next_reset, None
             )
         )
 
@@ -139,14 +146,23 @@ def batch_import_accounts(records: list[dict]) -> dict:
             if not uid:
                 # 无 user_id 时用 token 前 12 位兜底主键
                 uid = "tok_" + token[:24]
+            # 可选企业域名：非空则归一化为 VPC 实例名，非法条目跳过
+            domain_val: str | None = None
+            domain_raw = str(rec.get("enterprise_domain") or "").strip()
+            if domain_raw:
+                try:
+                    domain_val = normalize_vpc_domain(domain_raw)
+                except ValueError:
+                    skipped += 1
+                    continue
             existing = conn.execute("SELECT enabled FROM accounts WHERE uid = ?", (uid,)).fetchone()
             enabled = existing[0] if existing else 1
             conn.execute(
                 """
                 INSERT OR REPLACE INTO accounts (
                     uid, name, user_type, security_oauth_token, refresh_token, machine_id,
-                    enabled, last_status, last_error, quota, is_quota_exceeded, plan, user_tag, next_reset_at, token_expires_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 0, 0, 'PLAN_TIER_PRO_TRIAL', 'Pro Trial', NULL, ?)
+                    enabled, last_status, last_error, quota, is_quota_exceeded, plan, user_tag, next_reset_at, token_expires_at, enterprise_domain
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ok', NULL, 0, 0, 'PLAN_TIER_PRO_TRIAL', 'Pro Trial', NULL, ?, ?)
                 """,
                 (
                     uid,
@@ -157,13 +173,18 @@ def batch_import_accounts(records: list[dict]) -> dict:
                     str(uuid.uuid4()),
                     enabled,
                     str(rec.get("expires_at") or ""),
+                    domain_val,
                 ),
             )
             imported += 1
+        fallback_active_uid: str | None = None
         if not db_get_settings("active_uid"):
             active = conn.execute("SELECT uid FROM accounts WHERE enabled = 1 LIMIT 1").fetchone()
             if active:
-                db_set_settings("active_uid", active["uid"])
+                fallback_active_uid = active["uid"]
+    # settings 写库必须放到账号事务提交之后：本事务持写锁时新连接写入 settings 会等到 busy 超时死锁
+    if fallback_active_uid:
+        db_set_settings("active_uid", fallback_active_uid)
     return {"imported": imported, "skipped": skipped}
 
 
@@ -418,6 +439,7 @@ def get_active_session(target_account: str | list[str] | None = None) -> Session
         raise ValueError("账号池中没有可供公共调度的有效账号。请在控制台将至少一个账号的 API 模式设为【全部调用】。")
 
     region = account.get("region") or "cn"
+    enterprise_domain = str(account.get("enterprise_domain") or "").strip()
     identity = AuthIdentity(
         name=account["name"],
         aid=account["uid"],
@@ -429,6 +451,7 @@ def get_active_session(target_account: str | list[str] | None = None) -> Session
         security_oauth_token=account["security_oauth_token"],
         refresh_token=account["refresh_token"],
         region=region,
+        enterprise_domain=enterprise_domain,
     )
     
     _, machine_token, machine_type = new_machine()
@@ -488,6 +511,7 @@ def rotate_next_account(failed_uid: str, error_msg: str, target_account: str | l
     db_set_settings("active_uid", next_acc["uid"])
     
     region = next_acc.get("region") or "cn"
+    enterprise_domain = str(next_acc.get("enterprise_domain") or "").strip()
     identity = AuthIdentity(
         name=next_acc["name"],
         aid=next_acc["uid"],
@@ -499,6 +523,7 @@ def rotate_next_account(failed_uid: str, error_msg: str, target_account: str | l
         security_oauth_token=next_acc["security_oauth_token"],
         refresh_token=next_acc["refresh_token"],
         region=region,
+        enterprise_domain=enterprise_domain,
     )
     _, machine_token, machine_type = new_machine()
     return new_session(
