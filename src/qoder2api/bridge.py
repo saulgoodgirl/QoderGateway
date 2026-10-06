@@ -1,5 +1,6 @@
 import copy
 import json
+import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -18,6 +19,8 @@ QODER_CHAT_URL = "https://api3.qoder.sh/algo/api/v2/service/pro/sse/agent_chat_g
 # 新版协议（Qoder CLI 现行）：OpenAI 兼容端点，纯 Bearer，无 COSY 签名，响应为标准 OpenAI SSE。
 # 性能远优于老版（老版默认带长 reasoning，复杂任务可到分钟级）。
 QODER_CHAT_URL_NEW = "https://api2-v2.qoder.sh/model/v1/chat/completions"
+
+logger = logging.getLogger("qoder2api.bridge")
 
 
 def now_ms() -> int:
@@ -351,18 +354,61 @@ class ToolCallAccumulator:
             while len(self.calls) <= index:
                 self.calls.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
             existing = self.calls[index]
-            if isinstance(delta.get("id"), str):
+            if isinstance(delta.get("id"), str) and delta["id"]:
                 existing["id"] = delta["id"]
             if isinstance(delta.get("type"), str):
                 existing["type"] = delta["type"]
             function = delta.get("function") or {}
-            if isinstance(function.get("name"), str):
+            if isinstance(function.get("name"), str) and function["name"]:
                 existing["function"]["name"] = function["name"]
             if isinstance(function.get("arguments"), str):
                 existing["function"]["arguments"] += function["arguments"]
 
     def snapshot(self) -> list[dict[str, Any]]:
         return copy.deepcopy(self.calls)
+
+
+def _json_ok(text: str) -> bool:
+    try:
+        json.loads(text)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+async def _reassemble_sse_lines(raw_lines: AsyncIterator[str]) -> AsyncIterator[str]:
+    buf = ""
+    async for line in raw_lines:
+        if not line:
+            continue
+        if line.startswith("data:"):
+            if buf:
+                # 防御：上一帧未闭合又遇到新帧。能交付则交付一次，否则丢弃并告警，避免脏数据跨帧扩散。
+                if _json_ok(buf):
+                    yield "data: " + buf
+                else:
+                    logger.warning("drop incomplete SSE frame len=%d head=%r", len(buf), buf[:80])
+                buf = ""
+            payload = line[5:].strip()
+            if payload == "[DONE]":
+                yield "data: [DONE]"
+                continue
+            if _json_ok(payload):
+                yield "data: " + payload
+            else:
+                buf = payload
+        elif buf:
+            # 续行（无 data: 前缀）：直接拼接（上游断行处无分隔符）
+            buf += line
+            if _json_ok(buf):
+                yield "data: " + buf
+                buf = ""
+        # 无缓冲的非 data: 行（注释 / event:）忽略
+    if buf:
+        if _json_ok(buf):
+            yield "data: " + buf
+        else:
+            logger.warning("drop incomplete SSE frame len=%d head=%r", len(buf), buf[:80])
 
 
 async def qoder_stream_lines(sess: SessionContext, body: dict[str, Any], model: str) -> AsyncIterator[str]:
@@ -378,7 +424,7 @@ async def qoder_stream_lines(sess: SessionContext, body: dict[str, Any], model: 
                 if response.status_code != 200:
                     text = await response.aread()
                     raise RuntimeError(f"HTTP {response.status_code} {text.decode(errors='replace')}")
-                async for line in response.aiter_lines():
+                async for line in _reassemble_sse_lines(response.aiter_lines()):
                     if line:
                         yield line
     else:
@@ -397,7 +443,7 @@ async def qoder_stream_lines(sess: SessionContext, body: dict[str, Any], model: 
                 if response.status_code != 200:
                     text = await response.aread()
                     raise RuntimeError(f"HTTP {response.status_code} {text.decode(errors='replace')}")
-                async for line in response.aiter_lines():
+                async for line in _reassemble_sse_lines(response.aiter_lines()):
                     if line:
                         yield line
 
@@ -429,6 +475,11 @@ async def stream_openai_response(req: dict[str, Any], sess: SessionContext) -> A
             for index, call in enumerate(delta.tool_calls):
                 item = copy.deepcopy(call)
                 item.setdefault("index", index)
+                if not item.get("id"):
+                    item.pop("id", None)
+                fn = item.get("function")
+                if isinstance(fn, dict) and not fn.get("name"):
+                    fn.pop("name", None)
                 indexed.append(item)
             tool_calls.append(indexed)
             out_delta = {"tool_calls": indexed}
