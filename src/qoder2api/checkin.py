@@ -260,6 +260,8 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
     if not row:
         return {"ok": False, "uid": uid, "error": "账号不存在"}
 
+    current_cycle = get_current_checkin_cycle()
+
     provider = row["provider"] if "provider" in row.keys() else "qoder"
     if provider and provider != "qoder":
         if provider.lower() == "zcode":
@@ -386,7 +388,6 @@ def claim_checkin(uid: str, force: bool = False) -> dict[str, Any]:
     base_api = get_openapi_url(region)
     campaigns_url = f"{base_api}/sash/api/v1/me/campaigns"
 
-    current_cycle = get_current_checkin_cycle()
     prev_cycle = row["last_checkin_cycle"] if "last_checkin_cycle" in row.keys() else None
     yesterday_cycle = (datetime.now(TZ_SHANGHAI) - timedelta(days=1)).strftime("%Y-%m-%d")
     old_streak = int(row["checkin_streak"] if "checkin_streak" in row.keys() and row["checkin_streak"] else 0)
@@ -546,7 +547,11 @@ def checkin_all_accounts(force: bool = False) -> dict[str, Any]:
     total_credits = 0
 
     for r in rows:
-        res = claim_checkin(r["uid"], force=force)
+        try:
+            res = claim_checkin(r["uid"], force=force)
+        except Exception as e:
+            logger.error(f"[Checkin] {r['uid']} 签到异常: {e}")
+            res = {"ok": False, "uid": r["uid"], "error": str(e)}
         results.append(res)
         if res.get("claimed"):
             claimed_count += 1

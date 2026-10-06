@@ -1,5 +1,6 @@
 import argparse
 import collections
+import logging
 import os
 import uuid
 from datetime import datetime
@@ -54,6 +55,12 @@ from .zcode import (
 from .oauth_device import (
     initiate_qoder_device_flow,
     poll_qoder_device_token,
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
 )
 
 BASE_DIR = os.path.dirname(__file__)
